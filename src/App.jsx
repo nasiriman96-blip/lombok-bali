@@ -6,7 +6,7 @@ import {
   Wrench, Zap, Users, Megaphone, Package, FileText, ShoppingBag,
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
-  CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User
+  CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -383,12 +383,12 @@ export default function App() {
   const saveTimer = useRef(null);
   const skipNextSave = useRef(false);
 
-  const [txModal, setTxModal] = useState(false);
-  const [goalModal, setGoalModal] = useState(false);
-  const [billModal, setBillModal] = useState(false);
-  const [debtModal, setDebtModal] = useState(false);
-  const [personModal, setPersonModal] = useState(false);
-  const [projModal, setProjModal] = useState(false);
+  const [txModal, setTxModal] = useState(null); // null closed | 'new' | transaction object being edited
+  const [goalModal, setGoalModal] = useState(null);
+  const [billModal, setBillModal] = useState(null);
+  const [debtModal, setDebtModal] = useState(null);
+  const [personModal, setPersonModal] = useState(null);
+  const [projModal, setProjModal] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [debts, setDebts] = useState(seedDebts());
   const [people, setPeople] = useState(seedPeople());
@@ -519,6 +519,7 @@ export default function App() {
   }
 
   const NAV = [
+    { id: "people", label: "Ahli", icon: Users2 },
     { id: "dashboard", label: "Dasbor", icon: LayoutDashboard },
     { id: "projects", label: "Proyek", icon: Building2 },
     { id: "transactions", label: "Transaksi", icon: Receipt },
@@ -526,7 +527,6 @@ export default function App() {
     { id: "savings", label: "Tabungan", icon: PiggyBank },
     { id: "bills", label: "Tagihan", icon: Bell },
     { id: "debts", label: "Hutang", icon: HandCoins },
-    { id: "people", label: "Ahli", icon: Users2 },
     { id: "analytics", label: "Analitik", icon: BarChart3 },
   ];
 
@@ -650,24 +650,74 @@ export default function App() {
 
       {/* FAB */}
       <button
-        onClick={() => setTxModal(true)}
+        onClick={() => setTxModal("new")}
         className="fixed bottom-6 right-6 z-30 flex items-center gap-2 px-5 py-3.5 rounded-full shadow-lg transition-all duration-200 hover:scale-105 active:scale-95"
         style={{ background: C.jade, color: "#08130F", fontWeight: 600, boxShadow: `0 8px 24px ${C.jadeSoft}` }}
       >
         <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
       </button>
 
-      <AddTransactionModal open={txModal} onClose={() => setTxModal(false)} C={C} projects={projects} goals={goals} bills={bills} debts={debts}
+      <AddTransactionModal
+        open={!!txModal}
+        editing={txModal && txModal !== "new" ? txModal : null}
+        onClose={() => setTxModal(null)}
+        C={C} projects={projects} goals={goals} bills={bills} debts={debts}
         onAddTransaction={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])}
+        onEditTransaction={(id, data) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)))}
         onContributeGoal={(goalId, amt) => setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, current: g.current + amt } : g)))}
         onPayBill={(billId, amt) => setBills((prev) => prev.map((b) => (b.id === billId ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)))}
         onPayDebt={(debtId, amt) => setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)))}
       />
-      <AddGoalModal open={goalModal} onClose={() => setGoalModal(false)} C={C} projects={projects} onAdd={(g) => setGoals((prev) => [{ id: uid("g"), current: 0, ...g }, ...prev])} />
-      <AddBillModal open={billModal} onClose={() => setBillModal(false)} C={C} projects={projects} onAdd={(b) => setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...b }, ...prev])} />
-      <AddDebtModal open={debtModal} onClose={() => setDebtModal(false)} C={C} projects={projects} onAdd={(d) => setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...d }, ...prev])} />
-      <AddPersonModal open={personModal} onClose={() => setPersonModal(false)} C={C} projects={projects} onAdd={(p) => setPeople((prev) => [{ id: uid("ah"), ...p }, ...prev])} />
-      <AddProjectModal open={projModal} onClose={() => setProjModal(false)} C={C} onAdd={(p) => setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...p }])} />
+      <AddGoalModal
+        open={!!goalModal}
+        editing={goalModal && goalModal !== "new" ? goalModal : null}
+        onClose={() => setGoalModal(null)}
+        C={C} projects={projects}
+        onSave={(data) => {
+          if (data.id) setGoals((prev) => prev.map((g) => (g.id === data.id ? { ...g, ...data } : g)));
+          else setGoals((prev) => [{ id: uid("g"), current: 0, ...data }, ...prev]);
+        }}
+      />
+      <AddBillModal
+        open={!!billModal}
+        editing={billModal && billModal !== "new" ? billModal : null}
+        onClose={() => setBillModal(null)}
+        C={C} projects={projects}
+        onSave={(data) => {
+          if (data.id) setBills((prev) => prev.map((b) => (b.id === data.id ? { ...b, ...data } : b)));
+          else setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...data }, ...prev]);
+        }}
+      />
+      <AddDebtModal
+        open={!!debtModal}
+        editing={debtModal && debtModal !== "new" ? debtModal : null}
+        onClose={() => setDebtModal(null)}
+        C={C} projects={projects}
+        onSave={(data) => {
+          if (data.id) setDebts((prev) => prev.map((d) => (d.id === data.id ? { ...d, ...data } : d)));
+          else setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...data }, ...prev]);
+        }}
+      />
+      <AddPersonModal
+        open={!!personModal}
+        editing={personModal && personModal !== "new" ? personModal : null}
+        onClose={() => setPersonModal(null)}
+        C={C} projects={projects}
+        onSave={(data) => {
+          if (data.id) setPeople((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p)));
+          else setPeople((prev) => [{ id: uid("ah"), ...data }, ...prev]);
+        }}
+      />
+      <AddProjectModal
+        open={!!projModal}
+        editing={projModal && projModal !== "new" ? projModal : null}
+        onClose={() => setProjModal(null)}
+        C={C}
+        onSave={(data) => {
+          if (data.id) setProjects((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p)));
+          else setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...data }]);
+        }}
+      />
     </div>
   );
 }
@@ -786,6 +836,33 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
 
   return (
     <div className="space-y-6 lb-anim">
+      {/* PEOPLE / AHLI SUMMARY (paling atas) */}
+      {people && people.length > 0 && (
+        <Card C={C} pad="p-0">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
+            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Data Ahli</h3>
+            <button onClick={() => setTab("people")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
+          </div>
+          <div className="grid grid-cols-3 gap-4 px-5 pb-5">
+            {[
+              { key: "staff-l", label: "Staff Laki-laki", icon: User },
+              { key: "staff-p", label: "Staff Perempuan", icon: User },
+              { key: "anak", label: "Anak-anak", icon: Baby },
+            ].map((g) => {
+              const Icon = g.icon;
+              const count = people.filter((p) => p.category === g.key).length;
+              return (
+                <div key={g.key} className="rounded-xl p-3.5" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+                  <Icon size={16} color={C.jade} />
+                  <div className="text-xl font-bold mt-2" style={{ fontFamily: "Fraunces, serif" }}>{count}</div>
+                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{g.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* HERO */}
       <div className="relative overflow-hidden rounded-2xl px-6 py-7 sm:px-8 sm:py-9" style={{ background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surface2} 100%)`, border: `1px solid ${C.border}` }}>
         <ContourLines color={C.jade} opacity={isDark ? 0.16 : 0.09} />
@@ -953,31 +1030,6 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
       </div>
 
       {/* PEOPLE / AHLI SUMMARY */}
-      {people && people.length > 0 && (
-        <Card C={C} pad="p-0">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Data Ahli</h3>
-            <button onClick={() => setTab("people")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
-          </div>
-          <div className="grid grid-cols-3 gap-4 px-5 pb-5">
-            {[
-              { key: "staff-l", label: "Staff Laki-laki", icon: User },
-              { key: "staff-p", label: "Staff Perempuan", icon: User },
-              { key: "anak", label: "Anak-anak", icon: Baby },
-            ].map((g) => {
-              const Icon = g.icon;
-              const count = people.filter((p) => p.category === g.key).length;
-              return (
-                <div key={g.key} className="rounded-xl p-3.5" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
-                  <Icon size={16} color={C.jade} />
-                  <div className="text-xl font-bold mt-2" style={{ fontFamily: "Fraunces, serif" }}>{count}</div>
-                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{g.label}</div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
@@ -988,7 +1040,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
 function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }) {
   return (
     <div className="space-y-6 lb-anim">
-      <ViewHeader C={C} title="Profil Proyek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Proyek", onClick: () => setProjModal(true) } : null} />
+      <ViewHeader C={C} title="Profil Proyek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Proyek", onClick: () => setProjModal("new") } : null} />
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {projects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id);
@@ -996,8 +1048,18 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
           const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
           return (
             <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group cursor-pointer transition-transform duration-200 hover:-translate-y-1"
-              style={{}}
+              style={{ position: "relative" }}
             >
+              {isAdmin && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setProjModal(p); }}
+                  className="absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-transform duration-150 hover:scale-110"
+                  style={{ background: "rgba(0,0,0,0.35)", color: "#fff" }}
+                  title="Edit proyek"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
               <div onClick={() => { setActiveProject(p.id); setTab("dashboard"); }}>
                 <div className="relative h-20 flex items-end p-4" style={{ background: `linear-gradient(135deg, ${p.color}30, ${p.color}08)` }}>
                   <ContourLines color={p.color} opacity={0.3} />
@@ -1050,7 +1112,7 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
 
   return (
     <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Riwayat Transaksi" subtitle="Seluruh catatan pemasukan dan pengeluaran kawasan" action={{ label: "Tambah Transaksi", onClick: () => setTxModal(true) }} />
+      <ViewHeader C={C} title="Riwayat Transaksi" subtitle="Seluruh catatan pemasukan dan pengeluaran kawasan" action={{ label: "Tambah Transaksi", onClick: () => setTxModal("new") }} />
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -1087,9 +1149,14 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
                 {t.type === "income" ? "+" : "-"}{fmtIDR(t.amount)}
               </div>
               {isAdmin && (
-                <button onClick={() => setTransactions((prev) => prev.filter((x) => x.id !== t.id))} className="shrink-0 p-1.5 rounded-md transition-opacity" style={{ color: C.textFaint }} title="Hapus">
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => setTxModal(t)} className="p-1.5 rounded-md transition-opacity" style={{ color: C.textFaint }} title="Edit">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => setTransactions((prev) => prev.filter((x) => x.id !== t.id))} className="p-1.5 rounded-md transition-opacity" style={{ color: C.textFaint }} title="Hapus">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -1166,7 +1233,7 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
   };
   return (
     <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Target Tabungan" subtitle="Rencana dana jangka panjang untuk setiap kawasan" action={isAdmin ? { label: "Tambah Target", onClick: () => setGoalModal(true) } : null} />
+      <ViewHeader C={C} title="Target Tabungan" subtitle="Rencana dana jangka panjang untuk setiap kawasan" action={isAdmin ? { label: "Tambah Target", onClick: () => setGoalModal("new") } : null} />
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {goals.map((g) => {
           const pct = g.target ? (g.current / g.target) * 100 : 0;
@@ -1178,8 +1245,15 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{g.name}</div>
                   <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(g.projectId === "all" ? undefined : g.projectId) || "Seluruh Kawasan"}</div>
                 </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>
-                  <PiggyBank size={17} color={C.jade} />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isAdmin && (
+                    <button onClick={() => setGoalModal(g)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>
+                    <PiggyBank size={17} color={C.jade} />
+                  </div>
                 </div>
               </div>
               <div className="flex items-baseline gap-1.5 mb-1">
@@ -1220,7 +1294,7 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
 
   return (
     <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Pengingat Tagihan" subtitle="Lacak progres pembayaran hingga tagihan lunas" action={isAdmin ? { label: "Tambah Tagihan", onClick: () => setBillModal(true) } : null} />
+      <ViewHeader C={C} title="Pengingat Tagihan" subtitle="Lacak progres pembayaran hingga tagihan lunas" action={isAdmin ? { label: "Tambah Tagihan", onClick: () => setBillModal("new") } : null} />
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {sorted.map((b) => {
           const cat = catById(b.category || "belanja");
@@ -1239,8 +1313,15 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{b.name}</div>
                   <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(b.projectId)} · {b.recurring}</div>
                 </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : `${cat.color}22` }}>
-                  {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <CatIcon size={17} color={cat.color} />}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isAdmin && (
+                    <button onClick={() => setBillModal(b)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : `${cat.color}22` }}>
+                    {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <CatIcon size={17} color={cat.color} />}
+                  </div>
                 </div>
               </div>
 
@@ -1298,7 +1379,7 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
 
   return (
     <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Hutang" subtitle="Lacak progres pelunasan hutang & pinjaman kawasan" action={isAdmin ? { label: "Tambah Hutang", onClick: () => setDebtModal(true) } : null} />
+      <ViewHeader C={C} title="Hutang" subtitle="Lacak progres pelunasan hutang & pinjaman kawasan" action={isAdmin ? { label: "Tambah Hutang", onClick: () => setDebtModal("new") } : null} />
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {sorted.length === 0 && <div className="text-sm py-6" style={{ color: C.textFaint }}>Belum ada data hutang.</div>}
         {sorted.map((d) => {
@@ -1316,8 +1397,15 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{d.name}</div>
                   <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(d.projectId)} · {d.recurring}</div>
                 </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : C.goldSoft }}>
-                  {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <HandCoins size={17} color={C.gold} />}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isAdmin && (
+                    <button onClick={() => setDebtModal(d)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : C.goldSoft }}>
+                    {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <HandCoins size={17} color={C.gold} />}
+                  </div>
                 </div>
               </div>
 
@@ -1374,7 +1462,7 @@ function PeopleView({ C, people, setPeople, projects, projectName, setPersonModa
 
   return (
     <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Data Ahli" subtitle="Data staff (laki-laki/perempuan) dan anak-anak di kawasan" action={isAdmin ? { label: "Tambah Data", onClick: () => setPersonModal(true) } : null} />
+      <ViewHeader C={C} title="Data Ahli" subtitle="Data staff (laki-laki/perempuan) dan anak-anak di kawasan" action={isAdmin ? { label: "Tambah Data", onClick: () => setPersonModal("new") } : null} />
 
       <div className="flex gap-2 flex-wrap">
         {[{ id: "all", label: "Semua" }, ...PEOPLE_CATEGORIES].map((f) => (
@@ -1394,8 +1482,15 @@ function PeopleView({ C, people, setPeople, projects, projectName, setPersonModa
                 <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{p.name}</div>
                 <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(p.projectId)}</div>
               </div>
-              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>
-                {p.category === "anak" ? <Baby size={17} color={C.jade} /> : <User size={17} color={C.jade} />}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {isAdmin && (
+                  <button onClick={() => setPersonModal(p)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit">
+                    <Pencil size={13} />
+                  </button>
+                )}
+                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>
+                  {p.category === "anak" ? <Baby size={17} color={C.jade} /> : <User size={17} color={C.jade} />}
+                </div>
               </div>
             </div>
             <Badge C={C} tone="jade">{peopleCatLabel(p.category)}</Badge>
@@ -1492,7 +1587,7 @@ function ViewHeader({ C, title, subtitle, action }) {
 /* ---------------------------------------------------------------
    MODALS
 ----------------------------------------------------------------*/
-function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, onAddTransaction, onContributeGoal, onPayBill, onPayDebt }) {
+function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, editing, onAddTransaction, onEditTransaction, onContributeGoal, onPayBill, onPayDebt }) {
   const [type, setType] = useState("expense");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [category, setCategory] = useState(CATEGORIES[0].id);
@@ -1502,6 +1597,26 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
   const [goalId, setGoalId] = useState(goals[0]?.id || "");
   const [billId, setBillId] = useState(bills[0]?.id || "");
   const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
+
+  const isEditing = !!editing;
+
+  useEffect(() => {
+    if (open && editing) {
+      setType(editing.type);
+      setProjectId(editing.projectId);
+      setCategory(editing.category);
+      setAmount(String(editing.amount));
+      setDate(editing.date);
+      setNote(editing.note);
+    } else if (open && !editing) {
+      setType("expense");
+      setProjectId(projects[0]?.id || "");
+      setCategory(CATEGORIES[0].id);
+      setAmount("");
+      setDate(new Date().toISOString().slice(0, 10));
+      setNote("");
+    }
+  }, [open, editing]);
 
   const selectedBill = bills.find((b) => b.id === billId);
   const remainingBill = selectedBill ? Math.max(0, selectedBill.amount - selectedBill.paidAmount) : 0;
@@ -1513,6 +1628,14 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
   const submit = () => {
     const amt = Number(amount);
     if (!amt || amt <= 0) return;
+
+    if (isEditing) {
+      if (!note || !projectId) return;
+      onEditTransaction(editing.id, { type, projectId, category: type === "income" ? "belanja" : category, amount: amt, date, note });
+      reset();
+      onClose();
+      return;
+    }
 
     if (type === "goal") {
       const g = goals.find((x) => x.id === goalId);
@@ -1537,17 +1660,18 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
     onClose();
   };
 
-  const TYPES = [
+  const ALL_TYPES = [
     { id: "expense", label: "Pengeluaran" },
     { id: "income", label: "Pemasukan" },
     { id: "goal", label: "Ke Tabungan" },
     { id: "bill", label: "Bayar Tagihan" },
     { id: "debt", label: "Bayar Hutang" },
   ];
+  const TYPES = isEditing ? ALL_TYPES.filter((t) => t.id === "expense" || t.id === "income") : ALL_TYPES;
   const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "bill" ? C.gold : tp === "debt" ? C.gold : C.coral);
 
   return (
-    <Modal open={open} onClose={onClose} title="Tambah Transaksi" C={C}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Transaksi" : "Tambah Transaksi"} C={C}>
       <div className="grid grid-cols-2 gap-2 mb-4">
         {TYPES.map((tp) => (
           <button key={tp.id} onClick={() => setType(tp.id)} className="py-2 rounded-lg text-sm font-medium transition-all duration-150"
@@ -1574,7 +1698,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
         </>
       )}
 
-      {type === "goal" && (
+      {type === "goal" && !isEditing && (
         <Field label="Target Tabungan" C={C}>
           {goals.length === 0 ? (
             <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada target tabungan. Buat dulu di tab Tabungan.</div>
@@ -1586,7 +1710,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
         </Field>
       )}
 
-      {type === "bill" && (
+      {type === "bill" && !isEditing && (
         <Field label="Tagihan" C={C}>
           {bills.length === 0 ? (
             <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada tagihan. Buat dulu di tab Tagihan.</div>
@@ -1601,7 +1725,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
         </Field>
       )}
 
-      {type === "debt" && (
+      {type === "debt" && !isEditing && (
         <Field label="Hutang" C={C}>
           {(!debts || debts.length === 0) ? (
             <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada data hutang. Buat dulu di tab Hutang.</div>
@@ -1627,31 +1751,39 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} />
         </Field>
       )}
-      {(type === "goal" || type === "bill" || type === "debt") && (
+      {(type === "goal" || type === "bill" || type === "debt") && !isEditing && (
         <Field label="Catatan (opsional)" C={C}>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} />
         </Field>
       )}
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Transaksi</button>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Transaksi"}</button>
     </Modal>
   );
 }
 
-function AddGoalModal({ open, onClose, C, projects, onAdd }) {
+function AddGoalModal({ open, onClose, C, projects, editing, onSave }) {
   const [name, setName] = useState("");
   const [projectId, setProjectId] = useState("all");
   const [target, setTarget] = useState("");
   const [deadline, setDeadline] = useState("");
+  const isEditing = !!editing;
+
+  useEffect(() => {
+    if (open && editing) {
+      setName(editing.name); setProjectId(editing.projectId); setTarget(String(editing.target)); setDeadline(editing.deadline);
+    } else if (open && !editing) {
+      setName(""); setProjectId("all"); setTarget(""); setDeadline("");
+    }
+  }, [open, editing]);
 
   const submit = () => {
     if (!name || !target || !deadline) return;
-    onAdd({ name, projectId, target: Number(target), deadline });
-    setName(""); setTarget(""); setDeadline("");
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, target: Number(target), deadline });
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Target Tabungan Baru" C={C}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Target Tabungan" : "Target Tabungan Baru"} C={C}>
       <Field label="Nama Target" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Dana Renovasi" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}>
         <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
@@ -1661,28 +1793,37 @@ function AddGoalModal({ open, onClose, C, projects, onAdd }) {
       </Field>
       <Field label="Target Dana (Rp)" C={C}><input type="number" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Tenggat" C={C}><input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={inputStyle(C)} /></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Buat Target</button>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Buat Target"}</button>
     </Modal>
   );
 }
 
-function AddBillModal({ open, onClose, C, projects, onAdd }) {
+function AddBillModal({ open, onClose, C, projects, editing, onSave }) {
   const [name, setName] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [category, setCategory] = useState(CATEGORIES[0].id);
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [recurring, setRecurring] = useState("Bulanan");
+  const isEditing = !!editing;
+
+  useEffect(() => {
+    if (open && editing) {
+      setName(editing.name); setProjectId(editing.projectId); setCategory(editing.category || CATEGORIES[0].id);
+      setAmount(String(editing.amount)); setDueDate(editing.dueDate); setRecurring(editing.recurring);
+    } else if (open && !editing) {
+      setName(""); setProjectId(projects[0]?.id || ""); setCategory(CATEGORIES[0].id); setAmount(""); setDueDate(""); setRecurring("Bulanan");
+    }
+  }, [open, editing]);
 
   const submit = () => {
     if (!name || !amount || !dueDate) return;
-    onAdd({ name, projectId, category, amount: Number(amount), dueDate, recurring });
-    setName(""); setAmount(""); setDueDate("");
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, category, amount: Number(amount), dueDate, recurring });
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Tagihan Baru" C={C}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Tagihan" : "Tagihan Baru"} C={C}>
       <Field label="Nama Tagihan" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Listrik PLN" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}>
         <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
@@ -1701,33 +1842,41 @@ function AddBillModal({ open, onClose, C, projects, onAdd }) {
           {["Bulanan", "Tahunan", "Sekali"].map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
       </Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Tagihan</button>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Tagihan"}</button>
     </Modal>
   );
 }
 
-function AddProjectModal({ open, onClose, C, onAdd }) {
+function AddProjectModal({ open, onClose, C, editing, onSave }) {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [budget, setBudget] = useState("");
   const [manager, setManager] = useState("");
   const [desc, setDesc] = useState("");
+  const isEditing = !!editing;
+
+  useEffect(() => {
+    if (open && editing) {
+      setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || "");
+    } else if (open && !editing) {
+      setName(""); setLocation(""); setBudget(""); setManager(""); setDesc("");
+    }
+  }, [open, editing]);
 
   const submit = () => {
     if (!name || !location || !budget) return;
-    onAdd({ name, location, budget: Number(budget), manager, desc });
-    setName(""); setLocation(""); setBudget(""); setManager(""); setDesc("");
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: Number(budget), manager, desc });
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Proyek Baru" C={C}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Proyek" : "Proyek Baru"} C={C}>
       <Field label="Nama Proyek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
       <Field label="Anggaran Bulanan (Rp)" C={C}><input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ proyek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat proyek" style={inputStyle(C)} /></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Tambah Proyek</button>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Proyek"}</button>
     </Modal>
   );
 }
@@ -1735,23 +1884,32 @@ function AddProjectModal({ open, onClose, C, onAdd }) {
 /* ---------------------------------------------------------------
    ADD DEBT MODAL (HUTANG)
 ----------------------------------------------------------------*/
-function AddDebtModal({ open, onClose, C, projects, onAdd }) {
+function AddDebtModal({ open, onClose, C, projects, editing, onSave }) {
   const [name, setName] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [amount, setAmount] = useState("");
   const [paidAmount, setPaidAmount] = useState("0");
   const [dueDate, setDueDate] = useState("");
   const [recurring, setRecurring] = useState("Cicilan Bulanan");
+  const isEditing = !!editing;
+
+  useEffect(() => {
+    if (open && editing) {
+      setName(editing.name); setProjectId(editing.projectId); setAmount(String(editing.amount));
+      setPaidAmount(String(editing.paidAmount ?? 0)); setDueDate(editing.dueDate); setRecurring(editing.recurring);
+    } else if (open && !editing) {
+      setName(""); setProjectId(projects[0]?.id || ""); setAmount(""); setPaidAmount("0"); setDueDate(""); setRecurring("Cicilan Bulanan");
+    }
+  }, [open, editing]);
 
   const submit = () => {
     if (!name || !amount || !dueDate) return;
-    onAdd({ name, projectId, amount: Number(amount), paidAmount: Number(paidAmount) || 0, dueDate, recurring });
-    setName(""); setAmount(""); setPaidAmount("0"); setDueDate("");
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, amount: Number(amount), paidAmount: Number(paidAmount) || 0, dueDate, recurring });
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Hutang Baru" C={C}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Hutang" : "Hutang Baru"} C={C}>
       <Field label="Nama Hutang / Kreditur" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Pinjaman Bank Modal Kerja" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}>
         <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
@@ -1766,7 +1924,7 @@ function AddDebtModal({ open, onClose, C, projects, onAdd }) {
           {["Cicilan Bulanan", "Sekali", "Tahunan"].map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
       </Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Hutang</button>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Hutang"}</button>
     </Modal>
   );
 }
@@ -1774,7 +1932,7 @@ function AddDebtModal({ open, onClose, C, projects, onAdd }) {
 /* ---------------------------------------------------------------
    ADD PERSON MODAL (DATA AHLI)
 ----------------------------------------------------------------*/
-function AddPersonModal({ open, onClose, C, projects, onAdd }) {
+function AddPersonModal({ open, onClose, C, projects, editing, onSave }) {
   const [category, setCategory] = useState("staff-l");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [name, setName] = useState("");
@@ -1784,23 +1942,36 @@ function AddPersonModal({ open, onClose, C, projects, onAdd }) {
   const [birthDate, setBirthDate] = useState("");
   const [spouseName, setSpouseName] = useState("");
   const [childrenCount, setChildrenCount] = useState("0");
+  const isEditing = !!editing;
+
+  useEffect(() => {
+    if (open && editing) {
+      setCategory(editing.category); setProjectId(editing.projectId); setName(editing.name);
+      setFatherName(editing.fatherName || ""); setMotherName(editing.motherName || "");
+      setBirthPlace(editing.birthPlace || ""); setBirthDate(editing.birthDate || "");
+      setSpouseName(editing.spouseName || ""); setChildrenCount(String(editing.childrenCount ?? 0));
+    } else if (open && !editing) {
+      setCategory("staff-l"); setProjectId(projects[0]?.id || ""); setName("");
+      setFatherName(""); setMotherName(""); setBirthPlace(""); setBirthDate(""); setSpouseName(""); setChildrenCount("0");
+    }
+  }, [open, editing]);
 
   const isChild = category === "anak";
 
   const submit = () => {
     if (!name) return;
-    onAdd({
+    onSave({
+      ...(isEditing ? { id: editing.id } : {}),
       category, projectId, name,
       fatherName, motherName, birthPlace, birthDate,
       spouseName: isChild ? "" : spouseName,
       childrenCount: isChild ? 0 : Number(childrenCount) || 0,
     });
-    setName(""); setFatherName(""); setMotherName(""); setBirthPlace(""); setBirthDate(""); setSpouseName(""); setChildrenCount("0");
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Tambah Data Ahli" C={C}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Data Ahli" : "Tambah Data Ahli"} C={C}>
       <Field label="Kategori" C={C}>
         <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
           {PEOPLE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -1822,7 +1993,7 @@ function AddPersonModal({ open, onClose, C, projects, onAdd }) {
           <Field label="Jumlah Anak" C={C}><input type="number" min="0" value={childrenCount} onChange={(e) => setChildrenCount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
         </>
       )}
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Data</button>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Data"}</button>
     </Modal>
   );
 }
