@@ -8,5 +8,5 @@ import tailwindcss from "@tailwindcss/vite";
 // maka base harus "/keuangan-kawasan/"
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: "/lombok-bali-finance/",
+  base: "/lombok-bali/",
 });
