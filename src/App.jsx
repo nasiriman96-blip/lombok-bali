@@ -6,7 +6,7 @@ import {
   Wrench, Zap, Users, Megaphone, Package, FileText, ShoppingBag,
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
-  CreditCard, Droplet, Home
+  CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -75,7 +75,7 @@ const CATEGORIES = [
   { id: "listrik", label: "Listrik", icon: Zap, color: "#C98BD9" },
   { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3" },
   { id: "sewa-rumah", label: "Sewa Rumah", icon: Home, color: "#F0725A" },
-  { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#8FAE7E" },
+  { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3" },
 ];
 const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
@@ -130,6 +130,19 @@ const seedBills = () => [
   { id: "b4", projectId: "p4", name: "Retribusi Sampah", amount: 950000, paidAmount: 0, category: "belanja", dueDate: D(2026, 8, 15), recurring: "Bulanan" },
   { id: "b5", projectId: "p2", name: "Listrik PLN", amount: 8200000, paidAmount: 3000000, category: "listrik", dueDate: D(2026, 8, 28), recurring: "Bulanan" },
   { id: "b6", projectId: "p1", name: "Izin Operasional", amount: 5000000, paidAmount: 0, category: "bayar-hutang", dueDate: D(2026, 9, 5), recurring: "Tahunan" },
+];
+
+const seedDebts = () => [
+  { id: "d1", projectId: "p1", name: "Pinjaman Bank Modal Kerja", amount: 100000000, paidAmount: 40000000, dueDate: D(2026, 12, 31), recurring: "Cicilan Bulanan" },
+  { id: "d2", projectId: "p2", name: "Hutang Supplier Material", amount: 45000000, paidAmount: 45000000, dueDate: D(2026, 8, 10), recurring: "Sekali" },
+  { id: "d3", projectId: "p4", name: "Pinjaman Koperasi", amount: 25000000, paidAmount: 5000000, dueDate: D(2027, 3, 1), recurring: "Cicilan Bulanan" },
+];
+
+const seedPeople = () => [
+  { id: "ah1", category: "staff-l", projectId: "p1", name: "I Made Suarta", fatherName: "I Nengah Sujana", motherName: "Ni Wayan Ratih", birthPlace: "Mataram", birthDate: D(1988, 5, 12), spouseName: "Ni Putu Ayu", childrenCount: 2 },
+  { id: "ah2", category: "staff-p", projectId: "p2", name: "Baiq Rahayu", fatherName: "L. Sujono", motherName: "Baiq Sriwati", birthPlace: "Praya", birthDate: D(1992, 2, 20), spouseName: "", childrenCount: 1 },
+  { id: "ah3", category: "staff-l", projectId: "p3", name: "I Wayan Surya", fatherName: "I Ketut Rendra", motherName: "Ni Made Sinta", birthPlace: "Denpasar", birthDate: D(1985, 9, 3), spouseName: "Ni Kadek Widya", childrenCount: 3 },
+  { id: "ah4", category: "anak", projectId: "p1", name: "Kadek Wira Suarta", fatherName: "I Made Suarta", motherName: "Ni Putu Ayu", birthPlace: "Ubud", birthDate: D(2015, 6, 14), spouseName: "", childrenCount: 0 },
 ];
 
 /* ---------------------------------------------------------------
@@ -373,8 +386,12 @@ export default function App() {
   const [txModal, setTxModal] = useState(false);
   const [goalModal, setGoalModal] = useState(false);
   const [billModal, setBillModal] = useState(false);
+  const [debtModal, setDebtModal] = useState(false);
+  const [personModal, setPersonModal] = useState(false);
   const [projModal, setProjModal] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [debts, setDebts] = useState(seedDebts());
+  const [people, setPeople] = useState(seedPeople());
 
   // ---- Load from Supabase on mount ----
   useEffect(() => {
@@ -386,6 +403,8 @@ export default function App() {
         if (data.transactions) setTransactions(data.transactions);
         if (data.goals) setGoals(data.goals);
         if (data.bills) setBills(data.bills);
+        if (data.debts) setDebts(data.debts);
+        if (data.people) setPeople(data.people);
       }
       setLoaded(true);
     })();
@@ -399,6 +418,8 @@ export default function App() {
       if (data.transactions) setTransactions(data.transactions);
       if (data.goals) setGoals(data.goals);
       if (data.bills) setBills(data.bills);
+      if (data.debts) setDebts(data.debts);
+      if (data.people) setPeople(data.people);
       setSyncState("saved");
     });
     return unsubscribe;
@@ -414,11 +435,11 @@ export default function App() {
     setSyncState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await saveAppData({ projects, transactions, goals, bills });
+      await saveAppData({ projects, transactions, goals, bills, debts, people });
       setSyncState("saved");
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [projects, transactions, goals, bills, loaded]);
+  }, [projects, transactions, goals, bills, debts, people, loaded]);
 
   const scopedTx = useMemo(
     () => (activeProject === "all" ? transactions : transactions.filter((t) => t.projectId === activeProject)),
@@ -504,6 +525,8 @@ export default function App() {
     { id: "budget", label: "Anggaran", icon: Wallet },
     { id: "savings", label: "Tabungan", icon: PiggyBank },
     { id: "bills", label: "Tagihan", icon: Bell },
+    { id: "debts", label: "Hutang", icon: HandCoins },
+    { id: "people", label: "Ahli", icon: Users2 },
     { id: "analytics", label: "Analitik", icon: BarChart3 },
   ];
 
@@ -596,7 +619,7 @@ export default function App() {
         {/* MAIN */}
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && (
-            <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal }} />
+            <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people }} />
           )}
           {tab === "projects" && (
             <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />
@@ -613,6 +636,12 @@ export default function App() {
           {tab === "bills" && (
             <BillsView {...{ C, bills, setBills, projects, projectName, setBillModal, isAdmin }} />
           )}
+          {tab === "debts" && (
+            <DebtsView {...{ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin }} />
+          )}
+          {tab === "people" && (
+            <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin }} />
+          )}
           {tab === "analytics" && (
             <AnalyticsView {...{ C, categoryBreakdown, monthlyTrend, projectComparison, totals }} />
           )}
@@ -628,13 +657,16 @@ export default function App() {
         <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
       </button>
 
-      <AddTransactionModal open={txModal} onClose={() => setTxModal(false)} C={C} projects={projects} goals={goals} bills={bills}
+      <AddTransactionModal open={txModal} onClose={() => setTxModal(false)} C={C} projects={projects} goals={goals} bills={bills} debts={debts}
         onAddTransaction={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])}
         onContributeGoal={(goalId, amt) => setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, current: g.current + amt } : g)))}
         onPayBill={(billId, amt) => setBills((prev) => prev.map((b) => (b.id === billId ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)))}
+        onPayDebt={(debtId, amt) => setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)))}
       />
       <AddGoalModal open={goalModal} onClose={() => setGoalModal(false)} C={C} projects={projects} onAdd={(g) => setGoals((prev) => [{ id: uid("g"), current: 0, ...g }, ...prev])} />
       <AddBillModal open={billModal} onClose={() => setBillModal(false)} C={C} projects={projects} onAdd={(b) => setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...b }, ...prev])} />
+      <AddDebtModal open={debtModal} onClose={() => setDebtModal(false)} C={C} projects={projects} onAdd={(d) => setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...d }, ...prev])} />
+      <AddPersonModal open={personModal} onClose={() => setPersonModal(false)} C={C} projects={projects} onAdd={(p) => setPeople((prev) => [{ id: uid("ah"), ...p }, ...prev])} />
       <AddProjectModal open={projModal} onClose={() => setProjModal(false)} C={C} onAdd={(p) => setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...p }])} />
     </div>
   );
@@ -747,7 +779,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
 /* ---------------------------------------------------------------
    DASHBOARD
 ----------------------------------------------------------------*/
-function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal }) {
+function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people }) {
   const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
   const recent = scopedTx.slice(0, 5);
   const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
@@ -919,6 +951,33 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
           </div>
         </Card>
       </div>
+
+      {/* PEOPLE / AHLI SUMMARY */}
+      {people && people.length > 0 && (
+        <Card C={C} pad="p-0">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
+            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Data Ahli</h3>
+            <button onClick={() => setTab("people")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
+          </div>
+          <div className="grid grid-cols-3 gap-4 px-5 pb-5">
+            {[
+              { key: "staff-l", label: "Staff Laki-laki", icon: User },
+              { key: "staff-p", label: "Staff Perempuan", icon: User },
+              { key: "anak", label: "Anak-anak", icon: Baby },
+            ].map((g) => {
+              const Icon = g.icon;
+              const count = people.filter((p) => p.category === g.key).length;
+              return (
+                <div key={g.key} className="rounded-xl p-3.5" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+                  <Icon size={16} color={C.jade} />
+                  <div className="text-xl font-bold mt-2" style={{ fontFamily: "Fraunces, serif" }}>{count}</div>
+                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{g.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1223,8 +1282,140 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
 }
 
 /* ---------------------------------------------------------------
-   ANALYTICS VIEW
+   DEBTS (HUTANG) VIEW
 ----------------------------------------------------------------*/
+function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin }) {
+  const today = new Date(new Date().toDateString());
+  const sorted = [...debts].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  const addPayment = (id) => {
+    const debt = debts.find((d) => d.id === id);
+    const amt = Number(prompt(`Tambah cicilan untuk "${debt?.name}" (Rp):`));
+    if (!amt || amt <= 0) return;
+    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)));
+  };
+  const markFullyPaid = (id) => setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: d.amount } : d)));
+
+  return (
+    <div className="space-y-5 lb-anim">
+      <ViewHeader C={C} title="Hutang" subtitle="Lacak progres pelunasan hutang & pinjaman kawasan" action={isAdmin ? { label: "Tambah Hutang", onClick: () => setDebtModal(true) } : null} />
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {sorted.length === 0 && <div className="text-sm py-6" style={{ color: C.textFaint }}>Belum ada data hutang.</div>}
+        {sorted.map((d) => {
+          const isPaid = d.paidAmount >= d.amount;
+          const due = new Date(d.dueDate);
+          const overdue = !isPaid && due < today;
+          const soon = !isPaid && !overdue && (due - today) / 86400000 <= 5;
+          const pct = d.amount ? (d.paidAmount / d.amount) * 100 : 0;
+          const daysLeft = Math.ceil((due - today) / 86400000);
+
+          return (
+            <Card key={d.id} C={C} className="relative overflow-hidden">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{d.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(d.projectId)} · {d.recurring}</div>
+                </div>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : C.goldSoft }}>
+                  {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <HandCoins size={17} color={C.gold} />}
+                </div>
+              </div>
+
+              <div className="flex items-baseline gap-1.5 mb-1">
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700 }}>{fmtIDR(d.paidAmount)}</span>
+                <span className="text-xs" style={{ color: C.textFaint }}>/ {fmtIDR(d.amount)}</span>
+              </div>
+              <ProgressBar pct={pct} color={isPaid ? C.jade : overdue ? C.coral : C.gold} C={C} height={9} />
+
+              <div className="flex items-center justify-between mt-3 text-xs" style={{ color: C.textFaint }}>
+                <span>{pct.toFixed(0)}% terlunasi</span>
+                <span className="flex items-center gap-1"><Calendar size={11} />{isPaid ? "Lunas" : daysLeft >= 0 ? `${daysLeft} hari lagi` : `Terlambat ${Math.abs(daysLeft)} hari`}</span>
+              </div>
+
+              <div className="mt-2">
+                <Badge C={C} tone={isPaid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>
+                  {isPaid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera Jatuh Tempo" : "Belum Lunas"}
+                </Badge>
+              </div>
+
+              {!isPaid && (
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => addPayment(d.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95"
+                    style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}>
+                    <PlusCircle size={14} /> Cicil
+                  </button>
+                  <button onClick={() => markFullyPaid(d.id)} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95"
+                    style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}>
+                    <CheckCircle2 size={14} />
+                  </button>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   PEOPLE (AHLI) VIEW
+----------------------------------------------------------------*/
+const PEOPLE_CATEGORIES = [
+  { id: "staff-l", label: "Staff Laki-laki" },
+  { id: "staff-p", label: "Staff Perempuan" },
+  { id: "anak", label: "Anak" },
+];
+const peopleCatLabel = (id) => PEOPLE_CATEGORIES.find((c) => c.id === id)?.label || id;
+
+function PeopleView({ C, people, setPeople, projects, projectName, setPersonModal, isAdmin }) {
+  const [filter, setFilter] = useState("all");
+  const rows = people.filter((p) => filter === "all" || p.category === filter);
+
+  return (
+    <div className="space-y-5 lb-anim">
+      <ViewHeader C={C} title="Data Ahli" subtitle="Data staff (laki-laki/perempuan) dan anak-anak di kawasan" action={isAdmin ? { label: "Tambah Data", onClick: () => setPersonModal(true) } : null} />
+
+      <div className="flex gap-2 flex-wrap">
+        {[{ id: "all", label: "Semua" }, ...PEOPLE_CATEGORIES].map((f) => (
+          <button key={f.id} onClick={() => setFilter(f.id)} className="px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            style={{ background: filter === f.id ? C.jadeSoft : C.surface2, color: filter === f.id ? C.jade : C.textMuted, border: `1px solid ${C.border}` }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {rows.length === 0 && <div className="text-sm py-6" style={{ color: C.textFaint }}>Belum ada data.</div>}
+        {rows.map((p) => (
+          <Card key={p.id} C={C}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{p.name}</div>
+                <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(p.projectId)}</div>
+              </div>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>
+                {p.category === "anak" ? <Baby size={17} color={C.jade} /> : <User size={17} color={C.jade} />}
+              </div>
+            </div>
+            <Badge C={C} tone="jade">{peopleCatLabel(p.category)}</Badge>
+            <div className="mt-3 space-y-1.5 text-xs" style={{ color: C.textMuted }}>
+              <div className="flex justify-between"><span style={{ color: C.textFaint }}>Nama Ayah</span><span>{p.fatherName || "-"}</span></div>
+              <div className="flex justify-between"><span style={{ color: C.textFaint }}>Nama Ibu</span><span>{p.motherName || "-"}</span></div>
+              <div className="flex justify-between"><span style={{ color: C.textFaint }}>Tempat, Tgl Lahir</span><span>{p.birthPlace}{p.birthDate ? `, ${fmtDate(p.birthDate)}` : ""}</span></div>
+              {p.category !== "anak" && (
+                <>
+                  <div className="flex justify-between"><span style={{ color: C.textFaint }}>Nama Istri/Suami</span><span>{p.spouseName || "-"}</span></div>
+                  <div className="flex justify-between"><span style={{ color: C.textFaint }}>Jumlah Anak</span><span>{p.childrenCount ?? 0}</span></div>
+                </>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
 function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, totals }) {
   return (
     <div className="space-y-6 lb-anim">
@@ -1301,7 +1492,7 @@ function ViewHeader({ C, title, subtitle, action }) {
 /* ---------------------------------------------------------------
    MODALS
 ----------------------------------------------------------------*/
-function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTransaction, onContributeGoal, onPayBill }) {
+function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, onAddTransaction, onContributeGoal, onPayBill, onPayDebt }) {
   const [type, setType] = useState("expense");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [category, setCategory] = useState(CATEGORIES[0].id);
@@ -1310,9 +1501,12 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTr
   const [note, setNote] = useState("");
   const [goalId, setGoalId] = useState(goals[0]?.id || "");
   const [billId, setBillId] = useState(bills[0]?.id || "");
+  const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
 
   const selectedBill = bills.find((b) => b.id === billId);
-  const remaining = selectedBill ? Math.max(0, selectedBill.amount - selectedBill.paidAmount) : 0;
+  const remainingBill = selectedBill ? Math.max(0, selectedBill.amount - selectedBill.paidAmount) : 0;
+  const selectedDebt = (debts || []).find((d) => d.id === debtId);
+  const remainingDebt = selectedDebt ? Math.max(0, selectedDebt.amount - selectedDebt.paidAmount) : 0;
 
   const reset = () => { setAmount(""); setNote(""); };
 
@@ -1330,6 +1524,11 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTr
       if (!b) return;
       onAddTransaction({ type: "expense", projectId: b.projectId, category: b.category || "bayar-hutang", amount: amt, date, note: note || `Bayar tagihan: ${b.name}` });
       onPayBill(billId, amt);
+    } else if (type === "debt") {
+      const d = (debts || []).find((x) => x.id === debtId);
+      if (!d) return;
+      onAddTransaction({ type: "expense", projectId: d.projectId, category: "bayar-hutang", amount: amt, date, note: note || `Cicilan hutang: ${d.name}` });
+      onPayDebt(debtId, amt);
     } else {
       if (!note || !projectId) return;
       onAddTransaction({ type, projectId, category: type === "income" ? "belanja" : category, amount: amt, date, note });
@@ -1343,8 +1542,9 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTr
     { id: "income", label: "Pemasukan" },
     { id: "goal", label: "Ke Tabungan" },
     { id: "bill", label: "Bayar Tagihan" },
+    { id: "debt", label: "Bayar Hutang" },
   ];
-  const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "bill" ? C.gold : C.coral);
+  const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "bill" ? C.gold : tp === "debt" ? C.gold : C.coral);
 
   return (
     <Modal open={open} onClose={onClose} title="Tambah Transaksi" C={C}>
@@ -1395,7 +1595,22 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTr
               <select value={billId} onChange={(e) => setBillId(e.target.value)} style={inputStyle(C)}>
                 {bills.map((b) => <option key={b.id} value={b.id}>{b.name} (sisa {fmtIDR(Math.max(0, b.amount - b.paidAmount))})</option>)}
               </select>
-              {selectedBill && <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>Sisa tagihan: {fmtIDR(remaining)}</div>}
+              {selectedBill && <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>Sisa tagihan: {fmtIDR(remainingBill)}</div>}
+            </>
+          )}
+        </Field>
+      )}
+
+      {type === "debt" && (
+        <Field label="Hutang" C={C}>
+          {(!debts || debts.length === 0) ? (
+            <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada data hutang. Buat dulu di tab Hutang.</div>
+          ) : (
+            <>
+              <select value={debtId} onChange={(e) => setDebtId(e.target.value)} style={inputStyle(C)}>
+                {debts.map((d) => <option key={d.id} value={d.id}>{d.name} (sisa {fmtIDR(Math.max(0, d.amount - d.paidAmount))})</option>)}
+              </select>
+              {selectedDebt && <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>Sisa hutang: {fmtIDR(remainingDebt)}</div>}
             </>
           )}
         </Field>
@@ -1412,7 +1627,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTr
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} />
         </Field>
       )}
-      {(type === "goal" || type === "bill") && (
+      {(type === "goal" || type === "bill" || type === "debt") && (
         <Field label="Catatan (opsional)" C={C}>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} />
         </Field>
@@ -1513,6 +1728,101 @@ function AddProjectModal({ open, onClose, C, onAdd }) {
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ proyek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat proyek" style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Tambah Proyek</button>
+    </Modal>
+  );
+}
+
+/* ---------------------------------------------------------------
+   ADD DEBT MODAL (HUTANG)
+----------------------------------------------------------------*/
+function AddDebtModal({ open, onClose, C, projects, onAdd }) {
+  const [name, setName] = useState("");
+  const [projectId, setProjectId] = useState(projects[0]?.id || "");
+  const [amount, setAmount] = useState("");
+  const [paidAmount, setPaidAmount] = useState("0");
+  const [dueDate, setDueDate] = useState("");
+  const [recurring, setRecurring] = useState("Cicilan Bulanan");
+
+  const submit = () => {
+    if (!name || !amount || !dueDate) return;
+    onAdd({ name, projectId, amount: Number(amount), paidAmount: Number(paidAmount) || 0, dueDate, recurring });
+    setName(""); setAmount(""); setPaidAmount("0"); setDueDate("");
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Hutang Baru" C={C}>
+      <Field label="Nama Hutang / Kreditur" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Pinjaman Bank Modal Kerja" style={inputStyle(C)} /></Field>
+      <Field label="Proyek" C={C}>
+        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Total Hutang (Rp)" C={C}><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Sudah Dibayar (Rp)" C={C}><input type="number" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Jatuh Tempo / Target Lunas" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
+      <Field label="Skema" C={C}>
+        <select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>
+          {["Cicilan Bulanan", "Sekali", "Tahunan"].map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </Field>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Hutang</button>
+    </Modal>
+  );
+}
+
+/* ---------------------------------------------------------------
+   ADD PERSON MODAL (DATA AHLI)
+----------------------------------------------------------------*/
+function AddPersonModal({ open, onClose, C, projects, onAdd }) {
+  const [category, setCategory] = useState("staff-l");
+  const [projectId, setProjectId] = useState(projects[0]?.id || "");
+  const [name, setName] = useState("");
+  const [fatherName, setFatherName] = useState("");
+  const [motherName, setMotherName] = useState("");
+  const [birthPlace, setBirthPlace] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [spouseName, setSpouseName] = useState("");
+  const [childrenCount, setChildrenCount] = useState("0");
+
+  const isChild = category === "anak";
+
+  const submit = () => {
+    if (!name) return;
+    onAdd({
+      category, projectId, name,
+      fatherName, motherName, birthPlace, birthDate,
+      spouseName: isChild ? "" : spouseName,
+      childrenCount: isChild ? 0 : Number(childrenCount) || 0,
+    });
+    setName(""); setFatherName(""); setMotherName(""); setBirthPlace(""); setBirthDate(""); setSpouseName(""); setChildrenCount("0");
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Tambah Data Ahli" C={C}>
+      <Field label="Kategori" C={C}>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
+          {PEOPLE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </Field>
+      <Field label="Proyek / Kawasan" C={C}>
+        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Nama Lengkap" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama lengkap" style={inputStyle(C)} /></Field>
+      <Field label="Nama Ayah" C={C}><input value={fatherName} onChange={(e) => setFatherName(e.target.value)} placeholder="Nama ayah" style={inputStyle(C)} /></Field>
+      <Field label="Nama Ibu" C={C}><input value={motherName} onChange={(e) => setMotherName(e.target.value)} placeholder="Nama ibu" style={inputStyle(C)} /></Field>
+      <Field label="Tempat Lahir" C={C}><input value={birthPlace} onChange={(e) => setBirthPlace(e.target.value)} placeholder="Contoh: Mataram" style={inputStyle(C)} /></Field>
+      <Field label="Tanggal Lahir" C={C}><input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={inputStyle(C)} /></Field>
+      {!isChild && (
+        <>
+          <Field label="Nama Istri / Suami" C={C}><input value={spouseName} onChange={(e) => setSpouseName(e.target.value)} placeholder="Kosongkan jika belum menikah" style={inputStyle(C)} /></Field>
+          <Field label="Jumlah Anak" C={C}><input type="number" min="0" value={childrenCount} onChange={(e) => setChildrenCount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+        </>
+      )}
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Data</button>
     </Modal>
   );
 }
