@@ -5,7 +5,8 @@ import {
   Wallet, Calendar, MapPin, Trash2, AlertTriangle, CheckCircle2,
   Wrench, Zap, Users, Megaphone, Package, FileText, ShoppingBag,
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
-  Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu
+  Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
+  CreditCard, Droplet, Home
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -69,14 +70,11 @@ const PALETTE = {
 };
 
 const CATEGORIES = [
-  { id: "konstruksi", label: "Konstruksi", icon: Wrench, color: "#E0B15C" },
-  { id: "operasional", label: "Operasional", icon: ShoppingBag, color: "#34D8A3" },
-  { id: "gaji", label: "Gaji & SDM", icon: Users, color: "#6FB3D9" },
-  { id: "pemasaran", label: "Pemasaran", icon: Megaphone, color: "#F0725A" },
-  { id: "utilitas", label: "Utilitas", icon: Zap, color: "#C98BD9" },
-  { id: "perlengkapan", label: "Perlengkapan", icon: Package, color: "#8FAE7E" },
-  { id: "pajak", label: "Pajak & Izin", icon: FileText, color: "#B08968" },
-  { id: "lainnya", label: "Lainnya", icon: MoreHorizontal, color: "#9CB0A6" },
+  { id: "bayar-hutang", label: "Bayar Hutang", icon: CreditCard, color: "#E0B15C" },
+  { id: "pdam", label: "PDAM", icon: Droplet, color: "#6FB3D9" },
+  { id: "listrik", label: "Listrik", icon: Zap, color: "#C98BD9" },
+  { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3" },
+  { id: "sewa-rumah", label: "Sewa Rumah", icon: Home, color: "#F0725A" },
 ];
 const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
@@ -95,26 +93,26 @@ const seedProjects = () => [
 const D = (y, m, d) => new Date(y, m - 1, d).toISOString().slice(0, 10);
 
 const seedTransactions = () => [
-  { id: "t1", projectId: "p1", type: "expense", category: "konstruksi", amount: 42000000, date: D(2026, 8, 2), note: "Pengecoran pondasi vila 5-8" },
-  { id: "t2", projectId: "p1", type: "expense", category: "perlengkapan", amount: 8500000, date: D(2026, 8, 6), note: "Furnitur teras" },
-  { id: "t3", projectId: "p1", type: "income", category: "lainnya", amount: 60000000, date: D(2026, 8, 1), note: "Pencairan dana investor tahap 3" },
-  { id: "t4", projectId: "p2", type: "expense", category: "konstruksi", amount: 75000000, date: D(2026, 8, 4), note: "Struktur atap sayap timur" },
-  { id: "t5", projectId: "p2", type: "expense", category: "gaji", amount: 34000000, date: D(2026, 8, 5), note: "Gaji tim proyek Agustus" },
-  { id: "t6", projectId: "p2", type: "expense", category: "utilitas", amount: 6200000, date: D(2026, 8, 10), note: "Listrik & air site" },
-  { id: "t7", projectId: "p2", type: "income", category: "lainnya", amount: 100000000, date: D(2026, 8, 1), note: "Termin pembayaran investor" },
-  { id: "t8", projectId: "p3", type: "expense", category: "pemasaran", amount: 15000000, date: D(2026, 8, 8), note: "Kampanye peluncuran & influencer" },
-  { id: "t9", projectId: "p3", type: "expense", category: "operasional", amount: 22000000, date: D(2026, 8, 9), note: "Bahan baku F&B" },
-  { id: "t10", projectId: "p3", type: "expense", category: "gaji", amount: 28000000, date: D(2026, 8, 12), note: "Gaji staf operasional" },
-  { id: "t11", projectId: "p3", type: "income", category: "lainnya", amount: 48000000, date: D(2026, 8, 15), note: "Pendapatan soft-opening" },
-  { id: "t12", projectId: "p4", type: "expense", category: "konstruksi", amount: 19000000, date: D(2026, 8, 3), note: "Instalasi panel surya" },
-  { id: "t13", projectId: "p4", type: "expense", category: "pajak", amount: 4200000, date: D(2026, 8, 7), note: "Retribusi izin lingkungan" },
-  { id: "t14", projectId: "p4", type: "income", category: "lainnya", amount: 30000000, date: D(2026, 8, 2), note: "Dana hibah pariwisata hijau" },
-  { id: "t15", projectId: "p1", type: "expense", category: "gaji", amount: 21000000, date: D(2026, 7, 28), note: "Gaji tukang & mandor Juli" },
-  { id: "t16", projectId: "p2", type: "expense", category: "perlengkapan", amount: 12500000, date: D(2026, 7, 20), note: "Keramik & sanitari" },
-  { id: "t17", projectId: "p3", type: "expense", category: "utilitas", amount: 5100000, date: D(2026, 7, 18), note: "Internet & listrik bulanan" },
-  { id: "t18", projectId: "p4", type: "expense", category: "operasional", amount: 7300000, date: D(2026, 7, 22), note: "Perlengkapan kebersihan pantai" },
-  { id: "t19", projectId: "p1", type: "expense", category: "pemasaran", amount: 6000000, date: D(2026, 7, 15), note: "Foto & video promosi" },
-  { id: "t20", projectId: "p2", type: "expense", category: "pajak", amount: 9800000, date: D(2026, 7, 10), note: "IMB tambahan fase 2" },
+  { id: "t1", projectId: "p1", type: "expense", category: "sewa-rumah", amount: 42000000, date: D(2026, 8, 2), note: "Pengecoran pondasi vila 5-8" },
+  { id: "t2", projectId: "p1", type: "expense", category: "belanja", amount: 8500000, date: D(2026, 8, 6), note: "Furnitur teras" },
+  { id: "t3", projectId: "p1", type: "income", category: "belanja", amount: 60000000, date: D(2026, 8, 1), note: "Pencairan dana investor tahap 3" },
+  { id: "t4", projectId: "p2", type: "expense", category: "sewa-rumah", amount: 75000000, date: D(2026, 8, 4), note: "Struktur atap sayap timur" },
+  { id: "t5", projectId: "p2", type: "expense", category: "bayar-hutang", amount: 34000000, date: D(2026, 8, 5), note: "Gaji tim proyek Agustus" },
+  { id: "t6", projectId: "p2", type: "expense", category: "listrik", amount: 6200000, date: D(2026, 8, 10), note: "Listrik & air site" },
+  { id: "t7", projectId: "p2", type: "income", category: "belanja", amount: 100000000, date: D(2026, 8, 1), note: "Termin pembayaran investor" },
+  { id: "t8", projectId: "p3", type: "expense", category: "belanja", amount: 15000000, date: D(2026, 8, 8), note: "Kampanye peluncuran & influencer" },
+  { id: "t9", projectId: "p3", type: "expense", category: "belanja", amount: 22000000, date: D(2026, 8, 9), note: "Bahan baku F&B" },
+  { id: "t10", projectId: "p3", type: "expense", category: "bayar-hutang", amount: 28000000, date: D(2026, 8, 12), note: "Gaji staf operasional" },
+  { id: "t11", projectId: "p3", type: "income", category: "belanja", amount: 48000000, date: D(2026, 8, 15), note: "Pendapatan soft-opening" },
+  { id: "t12", projectId: "p4", type: "expense", category: "sewa-rumah", amount: 19000000, date: D(2026, 8, 3), note: "Instalasi panel surya" },
+  { id: "t13", projectId: "p4", type: "expense", category: "pdam", amount: 4200000, date: D(2026, 8, 7), note: "Retribusi izin lingkungan" },
+  { id: "t14", projectId: "p4", type: "income", category: "belanja", amount: 30000000, date: D(2026, 8, 2), note: "Dana hibah pariwisata hijau" },
+  { id: "t15", projectId: "p1", type: "expense", category: "bayar-hutang", amount: 21000000, date: D(2026, 7, 28), note: "Gaji tukang & mandor Juli" },
+  { id: "t16", projectId: "p2", type: "expense", category: "belanja", amount: 12500000, date: D(2026, 7, 20), note: "Keramik & sanitari" },
+  { id: "t17", projectId: "p3", type: "expense", category: "listrik", amount: 5100000, date: D(2026, 7, 18), note: "Internet & listrik bulanan" },
+  { id: "t18", projectId: "p4", type: "expense", category: "belanja", amount: 7300000, date: D(2026, 7, 22), note: "Perlengkapan kebersihan pantai" },
+  { id: "t19", projectId: "p1", type: "expense", category: "belanja", amount: 6000000, date: D(2026, 7, 15), note: "Foto & video promosi" },
+  { id: "t20", projectId: "p2", type: "expense", category: "pdam", amount: 9800000, date: D(2026, 7, 10), note: "IMB tambahan fase 2" },
 ];
 
 const seedGoals = () => [
