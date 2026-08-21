@@ -75,6 +75,7 @@ const CATEGORIES = [
   { id: "listrik", label: "Listrik", icon: Zap, color: "#C98BD9" },
   { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3" },
   { id: "sewa-rumah", label: "Sewa Rumah", icon: Home, color: "#F0725A" },
+  { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#8FAE7E" },
 ];
 const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
@@ -123,12 +124,12 @@ const seedGoals = () => [
 ];
 
 const seedBills = () => [
-  { id: "b1", projectId: "p1", name: "Sewa Lahan Tahunan", amount: 35000000, dueDate: D(2026, 8, 25), paid: false, recurring: "Tahunan" },
-  { id: "b2", projectId: "p2", name: "Asuransi Bangunan", amount: 12500000, dueDate: D(2026, 8, 22), paid: false, recurring: "Tahunan" },
-  { id: "b3", projectId: "p3", name: "Internet & TV Kabel", amount: 1800000, dueDate: D(2026, 8, 18), paid: true, recurring: "Bulanan" },
-  { id: "b4", projectId: "p4", name: "Retribusi Sampah", amount: 950000, dueDate: D(2026, 8, 15), paid: false, recurring: "Bulanan" },
-  { id: "b5", projectId: "p2", name: "Listrik PLN", amount: 8200000, dueDate: D(2026, 8, 28), paid: false, recurring: "Bulanan" },
-  { id: "b6", projectId: "p1", name: "Izin Operasional", amount: 5000000, dueDate: D(2026, 9, 5), paid: false, recurring: "Tahunan" },
+  { id: "b1", projectId: "p1", name: "Sewa Lahan Tahunan", amount: 35000000, paidAmount: 0, category: "sewa-rumah", dueDate: D(2026, 8, 25), recurring: "Tahunan" },
+  { id: "b2", projectId: "p2", name: "Asuransi Bangunan", amount: 12500000, paidAmount: 0, category: "bayar-hutang", dueDate: D(2026, 8, 22), recurring: "Tahunan" },
+  { id: "b3", projectId: "p3", name: "Internet & TV Kabel", amount: 1800000, paidAmount: 1800000, category: "belanja", dueDate: D(2026, 8, 18), recurring: "Bulanan" },
+  { id: "b4", projectId: "p4", name: "Retribusi Sampah", amount: 950000, paidAmount: 0, category: "belanja", dueDate: D(2026, 8, 15), recurring: "Bulanan" },
+  { id: "b5", projectId: "p2", name: "Listrik PLN", amount: 8200000, paidAmount: 3000000, category: "listrik", dueDate: D(2026, 8, 28), recurring: "Bulanan" },
+  { id: "b6", projectId: "p1", name: "Izin Operasional", amount: 5000000, paidAmount: 0, category: "bayar-hutang", dueDate: D(2026, 9, 5), recurring: "Tahunan" },
 ];
 
 /* ---------------------------------------------------------------
@@ -627,9 +628,13 @@ export default function App() {
         <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
       </button>
 
-      <AddTransactionModal open={txModal} onClose={() => setTxModal(false)} C={C} projects={projects} onAdd={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])} />
+      <AddTransactionModal open={txModal} onClose={() => setTxModal(false)} C={C} projects={projects} goals={goals} bills={bills}
+        onAddTransaction={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])}
+        onContributeGoal={(goalId, amt) => setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, current: g.current + amt } : g)))}
+        onPayBill={(billId, amt) => setBills((prev) => prev.map((b) => (b.id === billId ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)))}
+      />
       <AddGoalModal open={goalModal} onClose={() => setGoalModal(false)} C={C} projects={projects} onAdd={(g) => setGoals((prev) => [{ id: uid("g"), current: 0, ...g }, ...prev])} />
-      <AddBillModal open={billModal} onClose={() => setBillModal(false)} C={C} projects={projects} onAdd={(b) => setBills((prev) => [{ id: uid("b"), paid: false, ...b }, ...prev])} />
+      <AddBillModal open={billModal} onClose={() => setBillModal(false)} C={C} projects={projects} onAdd={(b) => setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...b }, ...prev])} />
       <AddProjectModal open={projModal} onClose={() => setProjModal(false)} C={C} onAdd={(p) => setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...p }])} />
     </div>
   );
@@ -745,7 +750,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
 function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal }) {
   const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
   const recent = scopedTx.slice(0, 5);
-  const dueSoon = upcomingBills.filter((b) => !b.paid).slice(0, 4);
+  const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
 
   return (
     <div className="space-y-6 lb-anim">
@@ -800,7 +805,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
             <span style={{ color: C.textMuted, fontSize: 13 }}>Tagihan Menunggu</span>
             <Bell size={16} color={C.coral} />
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "Fraunces, serif" }}>{upcomingBills.filter((b) => !b.paid).length}</div>
+          <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "Fraunces, serif" }}>{upcomingBills.filter((b) => b.paidAmount < b.amount).length}</div>
         </Card>
         <Card C={C} className="lb-anim">
           <div className="flex items-center justify-between mb-2">
@@ -1145,36 +1150,74 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
 function BillsView({ C, bills, setBills, projects, projectName, setBillModal, isAdmin }) {
   const today = new Date(new Date().toDateString());
   const sorted = [...bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const togglePaid = (id) => setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paid: !b.paid } : b)));
+
+  const addPayment = (id) => {
+    const bill = bills.find((b) => b.id === id);
+    const amt = Number(prompt(`Tambah pembayaran untuk "${bill?.name}" (Rp):`));
+    if (!amt || amt <= 0) return;
+    setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)));
+  };
+  const markFullyPaid = (id) => setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: b.amount } : b)));
 
   return (
     <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Pengingat Tagihan" subtitle="Jangan sampai jatuh tempo terlewat" action={isAdmin ? { label: "Tambah Tagihan", onClick: () => setBillModal(true) } : null} />
-      <Card C={C} pad="p-0">
-        {sorted.map((b, i) => {
+      <ViewHeader C={C} title="Pengingat Tagihan" subtitle="Lacak progres pembayaran hingga tagihan lunas" action={isAdmin ? { label: "Tambah Tagihan", onClick: () => setBillModal(true) } : null} />
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {sorted.map((b) => {
+          const cat = catById(b.category || "belanja");
+          const CatIcon = cat.icon;
+          const isPaid = b.paidAmount >= b.amount;
           const due = new Date(b.dueDate);
-          const overdue = !b.paid && due < today;
-          const soon = !b.paid && !overdue && (due - today) / 86400000 <= 5;
+          const overdue = !isPaid && due < today;
+          const soon = !isPaid && !overdue && (due - today) / 86400000 <= 5;
+          const pct = b.amount ? (b.paidAmount / b.amount) * 100 : 0;
+          const daysLeft = Math.ceil((due - today) / 86400000);
+
           return (
-            <div key={b.id} className="flex items-center gap-3 px-5 py-4 transition-colors duration-150" style={{ borderTop: i === 0 ? "none" : `1px solid ${C.borderSoft}` }}>
-              <button onClick={() => togglePaid(b.id)} className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-150 hover:scale-110"
-                style={{ background: b.paid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : C.surface2 }}>
-                {b.paid ? <CheckCircle2 size={16} color={C.jade} /> : overdue ? <AlertTriangle size={16} color={C.coral} /> : <Bell size={16} color={soon ? C.gold : C.textFaint} />}
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate">{b.name}</div>
-                <div className="text-xs" style={{ color: C.textFaint }}>{projectName(b.projectId)} · {b.recurring} · jatuh tempo {fmtDate(b.dueDate)}</div>
+            <Card key={b.id} C={C} className="relative overflow-hidden">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16 }}>{b.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(b.projectId)} · {b.recurring}</div>
+                </div>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : `${cat.color}22` }}>
+                  {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <CatIcon size={17} color={cat.color} />}
+                </div>
               </div>
-              <div className="text-right shrink-0">
-                <div className="text-sm font-semibold" style={{ fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(b.amount)}</div>
-                <Badge C={C} tone={b.paid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>
-                  {b.paid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera" : "Belum Bayar"}
+
+              <div className="flex items-baseline gap-1.5 mb-1">
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700 }}>{fmtIDR(b.paidAmount)}</span>
+                <span className="text-xs" style={{ color: C.textFaint }}>/ {fmtIDR(b.amount)}</span>
+              </div>
+              <ProgressBar pct={pct} color={isPaid ? C.jade : overdue ? C.coral : C.gold} C={C} height={9} />
+
+              <div className="flex items-center justify-between mt-3 text-xs" style={{ color: C.textFaint }}>
+                <span>{pct.toFixed(0)}% terbayar</span>
+                <span className="flex items-center gap-1"><Calendar size={11} />{isPaid ? "Lunas" : daysLeft >= 0 ? `${daysLeft} hari lagi` : `Terlambat ${Math.abs(daysLeft)} hari`}</span>
+              </div>
+
+              <div className="mt-2">
+                <Badge C={C} tone={isPaid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>
+                  {isPaid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera Jatuh Tempo" : "Belum Lunas"}
                 </Badge>
               </div>
-            </div>
+
+              {!isPaid && (
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => addPayment(b.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95"
+                    style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}>
+                    <PlusCircle size={14} /> Bayar
+                  </button>
+                  <button onClick={() => markFullyPaid(b.id)} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95"
+                    style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}>
+                    <CheckCircle2 size={14} />
+                  </button>
+                </div>
+              )}
+            </Card>
           );
         })}
-      </Card>
+      </div>
     </div>
   );
 }
@@ -1258,52 +1301,122 @@ function ViewHeader({ C, title, subtitle, action }) {
 /* ---------------------------------------------------------------
    MODALS
 ----------------------------------------------------------------*/
-function AddTransactionModal({ open, onClose, C, projects, onAdd }) {
+function AddTransactionModal({ open, onClose, C, projects, goals, bills, onAddTransaction, onContributeGoal, onPayBill }) {
   const [type, setType] = useState("expense");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [category, setCategory] = useState("konstruksi");
+  const [category, setCategory] = useState(CATEGORIES[0].id);
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
+  const [goalId, setGoalId] = useState(goals[0]?.id || "");
+  const [billId, setBillId] = useState(bills[0]?.id || "");
+
+  const selectedBill = bills.find((b) => b.id === billId);
+  const remaining = selectedBill ? Math.max(0, selectedBill.amount - selectedBill.paidAmount) : 0;
+
+  const reset = () => { setAmount(""); setNote(""); };
 
   const submit = () => {
-    if (!amount || !note || !projectId) return;
-    onAdd({ type, projectId, category: type === "income" ? "lainnya" : category, amount: Number(amount), date, note });
-    setAmount(""); setNote("");
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return;
+
+    if (type === "goal") {
+      const g = goals.find((x) => x.id === goalId);
+      if (!g) return;
+      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amt, date, note: note || `Setor ke tabungan: ${g.name}` });
+      onContributeGoal(goalId, amt);
+    } else if (type === "bill") {
+      const b = bills.find((x) => x.id === billId);
+      if (!b) return;
+      onAddTransaction({ type: "expense", projectId: b.projectId, category: b.category || "bayar-hutang", amount: amt, date, note: note || `Bayar tagihan: ${b.name}` });
+      onPayBill(billId, amt);
+    } else {
+      if (!note || !projectId) return;
+      onAddTransaction({ type, projectId, category: type === "income" ? "belanja" : category, amount: amt, date, note });
+    }
+    reset();
     onClose();
   };
 
+  const TYPES = [
+    { id: "expense", label: "Pengeluaran" },
+    { id: "income", label: "Pemasukan" },
+    { id: "goal", label: "Ke Tabungan" },
+    { id: "bill", label: "Bayar Tagihan" },
+  ];
+  const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "bill" ? C.gold : C.coral);
+
   return (
     <Modal open={open} onClose={onClose} title="Tambah Transaksi" C={C}>
-      <div className="flex gap-2 mb-4">
-        {["expense", "income"].map((tp) => (
-          <button key={tp} onClick={() => setType(tp)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-            style={{ background: type === tp ? (tp === "income" ? C.jadeSoft : C.coralSoft) : C.surface2, color: type === tp ? (tp === "income" ? C.jade : C.coral) : C.textMuted }}>
-            {tp === "income" ? "Pemasukan" : "Pengeluaran"}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {TYPES.map((tp) => (
+          <button key={tp.id} onClick={() => setType(tp.id)} className="py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            style={{ background: type === tp.id ? `${typeColor(tp.id)}22` : C.surface2, color: type === tp.id ? typeColor(tp.id) : C.textMuted }}>
+            {tp.label}
           </button>
         ))}
       </div>
-      <Field label="Proyek" C={C}>
-        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </Field>
-      {type === "expense" && (
-        <Field label="Kategori" C={C}>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
-            {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
+
+      {(type === "expense" || type === "income") && (
+        <>
+          <Field label="Proyek" C={C}>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </Field>
+          {type === "expense" && (
+            <Field label="Kategori" C={C}>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
+                {CATEGORIES.filter((c) => c.id !== "tabungan").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            </Field>
+          )}
+        </>
+      )}
+
+      {type === "goal" && (
+        <Field label="Target Tabungan" C={C}>
+          {goals.length === 0 ? (
+            <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada target tabungan. Buat dulu di tab Tabungan.</div>
+          ) : (
+            <select value={goalId} onChange={(e) => setGoalId(e.target.value)} style={inputStyle(C)}>
+              {goals.map((g) => <option key={g.id} value={g.id}>{g.name} ({fmtIDR(g.current)} / {fmtIDR(g.target)})</option>)}
+            </select>
+          )}
         </Field>
       )}
+
+      {type === "bill" && (
+        <Field label="Tagihan" C={C}>
+          {bills.length === 0 ? (
+            <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada tagihan. Buat dulu di tab Tagihan.</div>
+          ) : (
+            <>
+              <select value={billId} onChange={(e) => setBillId(e.target.value)} style={inputStyle(C)}>
+                {bills.map((b) => <option key={b.id} value={b.id}>{b.name} (sisa {fmtIDR(Math.max(0, b.amount - b.paidAmount))})</option>)}
+              </select>
+              {selectedBill && <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>Sisa tagihan: {fmtIDR(remaining)}</div>}
+            </>
+          )}
+        </Field>
+      )}
+
       <Field label="Jumlah (Rp)" C={C}>
         <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={inputStyle(C)} />
       </Field>
       <Field label="Tanggal" C={C}>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} />
       </Field>
-      <Field label="Catatan" C={C}>
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} />
-      </Field>
+      {(type === "expense" || type === "income") && (
+        <Field label="Catatan" C={C}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} />
+        </Field>
+      )}
+      {(type === "goal" || type === "bill") && (
+        <Field label="Catatan (opsional)" C={C}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} />
+        </Field>
+      )}
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan Transaksi</button>
     </Modal>
   );
@@ -1341,13 +1454,14 @@ function AddGoalModal({ open, onClose, C, projects, onAdd }) {
 function AddBillModal({ open, onClose, C, projects, onAdd }) {
   const [name, setName] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
+  const [category, setCategory] = useState(CATEGORIES[0].id);
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [recurring, setRecurring] = useState("Bulanan");
 
   const submit = () => {
     if (!name || !amount || !dueDate) return;
-    onAdd({ name, projectId, amount: Number(amount), dueDate, recurring });
+    onAdd({ name, projectId, category, amount: Number(amount), dueDate, recurring });
     setName(""); setAmount(""); setDueDate("");
     onClose();
   };
@@ -1358,6 +1472,11 @@ function AddBillModal({ open, onClose, C, projects, onAdd }) {
       <Field label="Proyek" C={C}>
         <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Kategori" C={C}>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
+          {CATEGORIES.filter((c) => c.id !== "tabungan").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
       </Field>
       <Field label="Jumlah (Rp)" C={C}><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
