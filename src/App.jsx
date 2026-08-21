@@ -12,7 +12,22 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, LineChart, Line, Legend
 } from "recharts";
-import { loadAppData, saveAppData, subscribeAppData, getSession, setSession, clearSession } from "./lib/storage";
+
+/* ---------------------------------------------------------------
+   LOCAL STORAGE MOCK (PENGGANTI ./lib/storage)
+----------------------------------------------------------------*/
+const loadAppData = async () => JSON.parse(localStorage.getItem("lb_data") || "null");
+const saveAppData = async (data) => localStorage.setItem("lb_data", JSON.stringify(data));
+const subscribeAppData = (cb) => {
+  const handler = (e) => {
+    if (e.key === "lb_data") cb(JSON.parse(e.newValue || "null"));
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
+};
+const getSession = () => JSON.parse(localStorage.getItem("lb_session") || "null");
+const setSession = (u) => localStorage.setItem("lb_session", JSON.stringify(u));
+const clearSession = () => localStorage.removeItem("lb_session");
 
 /* ---------------------------------------------------------------
    TOKENS
@@ -393,7 +408,7 @@ export default function App() {
   const [debts, setDebts] = useState(seedDebts());
   const [people, setPeople] = useState(seedPeople());
 
-  // ---- Load from Supabase on mount ----
+  // ---- Load from LocalStorage on mount ----
   useEffect(() => {
     (async () => {
       const data = await loadAppData();
@@ -425,7 +440,7 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // ---- Save to Supabase on change (debounced) ----
+  // ---- Save to LocalStorage on change (debounced) ----
   useEffect(() => {
     if (!loaded) return;
     if (skipNextSave.current) {
@@ -661,11 +676,10 @@ export default function App() {
         open={!!txModal}
         editing={txModal && txModal !== "new" ? txModal : null}
         onClose={() => setTxModal(null)}
-        C={C} projects={projects} goals={goals} bills={bills} debts={debts}
+        C={C} projects={projects} goals={goals} debts={debts}
         onAddTransaction={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])}
         onEditTransaction={(id, data) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)))}
         onContributeGoal={(goalId, amt) => setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, current: g.current + amt } : g)))}
-        onPayBill={(billId, amt) => setBills((prev) => prev.map((b) => (b.id === billId ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)))}
         onPayDebt={(debtId, amt) => setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)))}
       />
       <AddGoalModal
@@ -812,7 +826,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-xs" style={{ color: C.textFaint }}>
           {syncState === "saving" ? <Cloud size={14} className="animate-pulse" /> : <Cloud size={14} style={{ color: C.jade }} />}
-          {syncState === "saving" ? "Menyimpan…" : "Tersimpan di cloud"}
+          {syncState === "saving" ? "Menyimpan…" : "Tersimpan lokal"}
         </div>
       </div>
       <button
@@ -1028,8 +1042,6 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
           </div>
         </Card>
       </div>
-
-      {/* PEOPLE / AHLI SUMMARY */}
     </div>
   );
 }
@@ -1226,8 +1238,9 @@ function BudgetView({ C, projects, transactions, thisMonthKey }) {
 ----------------------------------------------------------------*/
 function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin }) {
   const addFunds = (id) => {
-    const amt = prompt("Tambah dana tabungan (Rp):");
-    const n = Number(amt);
+    const amtStr = window.prompt("Tambah dana tabungan (Rp):");
+    if (!amtStr) return;
+    const n = Number(amtStr.replace(/[^0-9]/g, ""));
     if (!n || n <= 0) return;
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, current: g.current + n } : g)));
   };
@@ -1286,7 +1299,9 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
 
   const addPayment = (id) => {
     const bill = bills.find((b) => b.id === id);
-    const amt = Number(prompt(`Tambah pembayaran untuk "${bill?.name}" (Rp):`));
+    const amtStr = window.prompt(`Tambah pembayaran untuk "${bill?.name}" (Rp):`);
+    if (!amtStr) return;
+    const amt = Number(amtStr.replace(/[^0-9]/g, ""));
     if (!amt || amt <= 0) return;
     setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)));
   };
@@ -1371,7 +1386,9 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
 
   const addPayment = (id) => {
     const debt = debts.find((d) => d.id === id);
-    const amt = Number(prompt(`Tambah cicilan untuk "${debt?.name}" (Rp):`));
+    const amtStr = window.prompt(`Tambah cicilan untuk "${debt?.name}" (Rp):`);
+    if (!amtStr) return;
+    const amt = Number(amtStr.replace(/[^0-9]/g, ""));
     if (!amt || amt <= 0) return;
     setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)));
   };
@@ -1511,7 +1528,11 @@ function PeopleView({ C, people, setPeople, projects, projectName, setPersonModa
     </div>
   );
 }
-function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, totals }) {
+
+/* ---------------------------------------------------------------
+   ANALYTICS VIEW
+----------------------------------------------------------------*/
+function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison }) {
   return (
     <div className="space-y-6 lb-anim">
       <ViewHeader C={C} title="Analitik Keuangan" subtitle="Wawasan menyeluruh atas kinerja keuangan kawasan" />
@@ -1587,7 +1608,7 @@ function ViewHeader({ C, title, subtitle, action }) {
 /* ---------------------------------------------------------------
    MODALS
 ----------------------------------------------------------------*/
-function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, editing, onAddTransaction, onEditTransaction, onContributeGoal, onPayBill, onPayDebt }) {
+function AddTransactionModal({ open, onClose, C, projects, goals, debts, editing, onAddTransaction, onEditTransaction, onContributeGoal, onPayDebt }) {
   const [type, setType] = useState("expense");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [category, setCategory] = useState(CATEGORIES[0].id);
@@ -1595,7 +1616,6 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
   const [goalId, setGoalId] = useState(goals[0]?.id || "");
-  const [billId, setBillId] = useState(bills[0]?.id || "");
   const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
 
   const isEditing = !!editing;
@@ -1618,15 +1638,13 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
     }
   }, [open, editing]);
 
-  const selectedBill = bills.find((b) => b.id === billId);
-  const remainingBill = selectedBill ? Math.max(0, selectedBill.amount - selectedBill.paidAmount) : 0;
   const selectedDebt = (debts || []).find((d) => d.id === debtId);
   const remainingDebt = selectedDebt ? Math.max(0, selectedDebt.amount - selectedDebt.paidAmount) : 0;
 
   const reset = () => { setAmount(""); setNote(""); };
 
   const submit = () => {
-    const amt = Number(amount);
+    const amt = Number(String(amount).replace(/[^0-9]/g, ''));
     if (!amt || amt <= 0) return;
 
     if (isEditing) {
@@ -1642,11 +1660,6 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
       if (!g) return;
       onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amt, date, note: note || `Setor ke tabungan: ${g.name}` });
       onContributeGoal(goalId, amt);
-    } else if (type === "bill") {
-      const b = bills.find((x) => x.id === billId);
-      if (!b) return;
-      onAddTransaction({ type: "expense", projectId: b.projectId, category: b.category || "bayar-hutang", amount: amt, date, note: note || `Bayar tagihan: ${b.name}` });
-      onPayBill(billId, amt);
     } else if (type === "debt") {
       const d = (debts || []).find((x) => x.id === debtId);
       if (!d) return;
@@ -1664,11 +1677,10 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
     { id: "expense", label: "Pengeluaran" },
     { id: "income", label: "Pemasukan" },
     { id: "goal", label: "Ke Tabungan" },
-    { id: "bill", label: "Bayar Tagihan" },
     { id: "debt", label: "Bayar Hutang" },
   ];
   const TYPES = isEditing ? ALL_TYPES.filter((t) => t.id === "expense" || t.id === "income") : ALL_TYPES;
-  const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "bill" ? C.gold : tp === "debt" ? C.gold : C.coral);
+  const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "debt" ? C.gold : C.coral);
 
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Transaksi" : "Tambah Transaksi"} C={C}>
@@ -1710,21 +1722,6 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
         </Field>
       )}
 
-      {type === "bill" && !isEditing && (
-        <Field label="Tagihan" C={C}>
-          {bills.length === 0 ? (
-            <div className="text-xs py-2" style={{ color: C.textFaint }}>Belum ada tagihan. Buat dulu di tab Tagihan.</div>
-          ) : (
-            <>
-              <select value={billId} onChange={(e) => setBillId(e.target.value)} style={inputStyle(C)}>
-                {bills.map((b) => <option key={b.id} value={b.id}>{b.name} (sisa {fmtIDR(Math.max(0, b.amount - b.paidAmount))})</option>)}
-              </select>
-              {selectedBill && <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>Sisa tagihan: {fmtIDR(remainingBill)}</div>}
-            </>
-          )}
-        </Field>
-      )}
-
       {type === "debt" && !isEditing && (
         <Field label="Hutang" C={C}>
           {(!debts || debts.length === 0) ? (
@@ -1741,7 +1738,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
       )}
 
       <Field label="Jumlah (Rp)" C={C}>
-        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={inputStyle(C)} />
+        <input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} />
       </Field>
       <Field label="Tanggal" C={C}>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} />
@@ -1751,7 +1748,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, bills, debts, 
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} />
         </Field>
       )}
-      {(type === "goal" || type === "bill" || type === "debt") && !isEditing && (
+      {(type === "goal" || type === "debt") && !isEditing && (
         <Field label="Catatan (opsional)" C={C}>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} />
         </Field>
@@ -1777,8 +1774,9 @@ function AddGoalModal({ open, onClose, C, projects, editing, onSave }) {
   }, [open, editing]);
 
   const submit = () => {
-    if (!name || !target || !deadline) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, target: Number(target), deadline });
+    const t = Number(String(target).replace(/[^0-9]/g, ''));
+    if (!name || !t || !deadline) return;
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, target: t, deadline });
     onClose();
   };
 
@@ -1791,7 +1789,7 @@ function AddGoalModal({ open, onClose, C, projects, editing, onSave }) {
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </Field>
-      <Field label="Target Dana (Rp)" C={C}><input type="number" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Target Dana (Rp)" C={C}><input type="text" inputMode="numeric" value={target} onChange={(e) => setTarget(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Tenggat" C={C}><input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Buat Target"}</button>
     </Modal>
@@ -1817,8 +1815,9 @@ function AddBillModal({ open, onClose, C, projects, editing, onSave }) {
   }, [open, editing]);
 
   const submit = () => {
-    if (!name || !amount || !dueDate) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, category, amount: Number(amount), dueDate, recurring });
+    const a = Number(String(amount).replace(/[^0-9]/g, ''));
+    if (!name || !a || !dueDate) return;
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, category, amount: a, dueDate, recurring });
     onClose();
   };
 
@@ -1835,7 +1834,7 @@ function AddBillModal({ open, onClose, C, projects, editing, onSave }) {
           {CATEGORIES.filter((c) => c.id !== "tabungan").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
       </Field>
-      <Field label="Jumlah (Rp)" C={C}><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Jumlah (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Jatuh Tempo" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
       <Field label="Pengulangan" C={C}>
         <select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>
@@ -1864,8 +1863,9 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
   }, [open, editing]);
 
   const submit = () => {
-    if (!name || !location || !budget) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: Number(budget), manager, desc });
+    const b = Number(String(budget).replace(/[^0-9]/g, ''));
+    if (!name || !location || !b) return;
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc });
     onClose();
   };
 
@@ -1873,7 +1873,7 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Proyek" : "Proyek Baru"} C={C}>
       <Field label="Nama Proyek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
-      <Field label="Anggaran Bulanan (Rp)" C={C}><input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Anggaran Bulanan (Rp)" C={C}><input type="text" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ proyek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat proyek" style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Proyek"}</button>
@@ -1903,8 +1903,10 @@ function AddDebtModal({ open, onClose, C, projects, editing, onSave }) {
   }, [open, editing]);
 
   const submit = () => {
-    if (!name || !amount || !dueDate) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, amount: Number(amount), paidAmount: Number(paidAmount) || 0, dueDate, recurring });
+    const a = Number(String(amount).replace(/[^0-9]/g, ''));
+    const p = Number(String(paidAmount).replace(/[^0-9]/g, ''));
+    if (!name || !a || !dueDate) return;
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, amount: a, paidAmount: p || 0, dueDate, recurring });
     onClose();
   };
 
@@ -1916,8 +1918,8 @@ function AddDebtModal({ open, onClose, C, projects, editing, onSave }) {
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </Field>
-      <Field label="Total Hutang (Rp)" C={C}><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
-      <Field label="Sudah Dibayar (Rp)" C={C}><input type="number" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Total Hutang (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Sudah Dibayar (Rp)" C={C}><input type="text" inputMode="numeric" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Jatuh Tempo / Target Lunas" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
       <Field label="Skema" C={C}>
         <select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>
@@ -1959,13 +1961,14 @@ function AddPersonModal({ open, onClose, C, projects, editing, onSave }) {
   const isChild = category === "anak";
 
   const submit = () => {
+    const cc = Number(String(childrenCount).replace(/[^0-9]/g, ''));
     if (!name) return;
     onSave({
       ...(isEditing ? { id: editing.id } : {}),
       category, projectId, name,
       fatherName, motherName, birthPlace, birthDate,
       spouseName: isChild ? "" : spouseName,
-      childrenCount: isChild ? 0 : Number(childrenCount) || 0,
+      childrenCount: isChild ? 0 : cc || 0,
     });
     onClose();
   };
@@ -1990,7 +1993,7 @@ function AddPersonModal({ open, onClose, C, projects, editing, onSave }) {
       {!isChild && (
         <>
           <Field label="Nama Istri / Suami" C={C}><input value={spouseName} onChange={(e) => setSpouseName(e.target.value)} placeholder="Kosongkan jika belum menikah" style={inputStyle(C)} /></Field>
-          <Field label="Jumlah Anak" C={C}><input type="number" min="0" value={childrenCount} onChange={(e) => setChildrenCount(e.target.value)} placeholder="0" style={inputStyle(C)} /></Field>
+          <Field label="Jumlah Anak" C={C}><input type="text" inputMode="numeric" min="0" value={childrenCount} onChange={(e) => setChildrenCount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
         </>
       )}
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Data"}</button>
