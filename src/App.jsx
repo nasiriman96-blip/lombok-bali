@@ -13,24 +13,6 @@ import {
   XAxis, YAxis, CartesianGrid, LineChart, Line, Legend
 } from "recharts";
 
-// Menggunakan key "lb_data_v2" untuk mereset paksa data lama pengguna
-const STORAGE_KEY = "lb_data_v2";
-const loadAppData = async () => JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-const saveAppData = async (data) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-const subscribeAppData = (cb) => {
-  const handler = (e) => {
-    if (e.key === STORAGE_KEY) cb(JSON.parse(e.newValue || "null"));
-  };
-  window.addEventListener("storage", handler);
-  return () => window.removeEventListener("storage", handler);
-};
-const getSession = () => JSON.parse(localStorage.getItem("lb_session_v2") || "null");
-const setSession = (u) => localStorage.setItem("lb_session_v2", JSON.stringify(u));
-const clearSession = () => localStorage.removeItem("lb_session_v2");
-
-/* ---------------------------------------------------------------
-   TOKENS
-----------------------------------------------------------------*/
 const FONT_LINK_ID = "lb-fonts";
 function useFonts() {
   useEffect(() => {
@@ -43,6 +25,46 @@ function useFonts() {
     document.head.appendChild(link);
   }, []);
 }
+
+const STORAGE_KEY = "lb_data_v4_supabase_sync";
+const SESSION_KEY = "lb_session_v4";
+
+const loadAppData = async () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveAppData = async (data) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent("lb_storage_sync", { detail: data }));
+  } catch (e) {}
+};
+
+const subscribeAppData = (cb) => {
+  const handler = (e) => cb(e.detail);
+  window.addEventListener("lb_storage_sync", handler);
+  return () => window.removeEventListener("lb_storage_sync", handler);
+};
+
+const getSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+};
+
+const setSession = (u) => {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(u)); } catch (e) {}
+};
+
+const clearSession = () => {
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+};
 
 const PALETTE = {
   dark: {
@@ -63,16 +85,7 @@ const PALETTE = {
 
 const PROJECT_COLORS = ["#34D8A3", "#E0B15C", "#6FB3D9", "#F0725A", "#C98BD9", "#8FA69A"];
 
-// Semua data diatur kosong sebagai reset awal (Blank Slate)
-const seedProjects = () => [];
-const seedTransactions = () => [];
-const seedGoals = () => [];
-const seedBills = () => [];
-const seedDebts = () => [];
-const seedPeople = () => [];
-
 const DEFAULT_CATEGORIES = [
-  { id: "bayar-hutang", label: "Bayar Hutang", icon: CreditCard, color: "#E0B15C", default: true },
   { id: "pdam", label: "PDAM", icon: Droplet, color: "#6FB3D9", default: true },
   { id: "listrik", label: "Listrik", icon: Zap, color: "#C98BD9", default: true },
   { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3", default: true },
@@ -80,9 +93,6 @@ const DEFAULT_CATEGORIES = [
   { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3", default: true },
 ];
 
-/* ---------------------------------------------------------------
-   HELPERS
-----------------------------------------------------------------*/
 const fmtIDR = (n) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n || 0);
 const fmtDate = (s) => new Date(s + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 const monthKey = (s) => s.slice(0, 7);
@@ -183,7 +193,7 @@ function LoginScreen({ C, onLogin }) {
               <div style={{ fontSize: 11, color: C.textFaint }}>Keuangan Kawasan</div>
             </div>
           </div>
-          <div className="text-sm mb-5" style={{ color: C.textMuted }}>Masuk untuk mengakses data keuangan (mode bersih/reset).</div>
+          <div className="text-sm mb-5" style={{ color: C.textMuted }}>Masuk untuk mengakses sistem keuangan.</div>
           <Field label="Nama Anda" C={C}>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Made Wirawan" style={inputStyle(C)} onKeyDown={(e) => e.key === "Enter" && submit()} />
           </Field>
@@ -224,12 +234,12 @@ export default function App() {
   const handleLogin = (u) => { setUser(u); setSession(u); };
   const handleLogout = () => { setUser(null); clearSession(); };
 
-  const [projects, setProjects] = useState(seedProjects());
-  const [transactions, setTransactions] = useState(seedTransactions());
-  const [goals, setGoals] = useState(seedGoals());
-  const [bills, setBills] = useState(seedBills());
-  const [debts, setDebts] = useState(seedDebts());
-  const [people, setPeople] = useState(seedPeople());
+  const [projects, setProjects] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [goals, setGoals] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [debts, setDebts] = useState([]);
+  const [people, setPeople] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
 
   const [activeProject, setActiveProject] = useState("all");
@@ -239,7 +249,6 @@ export default function App() {
   const saveTimer = useRef(null);
   const skipNextSave = useRef(false);
 
-  // Modals state
   const [txModal, setTxModal] = useState(null); 
   const [goalModal, setGoalModal] = useState(null);
   const [billModal, setBillModal] = useState(null);
@@ -268,6 +277,7 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = subscribeAppData((data) => {
+      if (!data) return;
       skipNextSave.current = true;
       if (data.projects) setProjects(data.projects);
       if (data.transactions) setTransactions(data.transactions);
@@ -278,7 +288,9 @@ export default function App() {
       if (data.categories) setCategories(data.categories);
       setSyncState("saved");
     });
-    return unsubscribe;
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -289,7 +301,7 @@ export default function App() {
     saveTimer.current = setTimeout(async () => {
       await saveAppData({ projects, transactions, goals, bills, debts, people, categories });
       setSyncState("saved");
-    }, 500);
+    }, 600);
     return () => clearTimeout(saveTimer.current);
   }, [projects, transactions, goals, bills, debts, people, categories, loaded]);
 
@@ -343,7 +355,6 @@ export default function App() {
   );
 
   const upcomingBills = useMemo(() => bills.filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate)), [bills, activeProject]);
-  const scopedGoals = useMemo(() => goals.filter((g) => activeProject === "all" || g.projectId === activeProject || g.projectId === "all"), [goals, activeProject]);
 
   const projectName = (id) => projects.find((p) => p.id === id)?.name || "Kawasan (Semua Proyek)";
   const projectColor = (id) => projects.find((p) => p.id === id)?.color || C.jade;
@@ -432,7 +443,6 @@ export default function App() {
         <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
       </button>
 
-      {}
       <AddTransactionModal
         open={!!txModal} editing={txModal && txModal !== "new" ? txModal : null} onClose={() => setTxModal(null)}
         C={C} projects={projects} goals={goals} debts={debts} categories={categories}
@@ -451,9 +461,6 @@ export default function App() {
   );
 }
 
-/* ---------------------------------------------------------------
-   NAV PIECES
-----------------------------------------------------------------*/
 function Brand({ C, compact }) {
   return (
     <div className="flex items-center gap-2.5 mb-1">
@@ -519,7 +526,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-xs" style={{ color: C.textFaint }}>
           {syncState === "saving" ? <Cloud size={14} className="animate-pulse" /> : <Cloud size={14} style={{ color: C.jade }} />}
-          {syncState === "saving" ? "Menyimpan…" : "Tersimpan di browser"}
+          {syncState === "saving" ? "Menyimpan data…" : "Data tersimpan"}
         </div>
       </div>
       <button onClick={() => setIsDark((d) => !d)} className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200" style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>
@@ -708,7 +715,7 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
   return (
     <div className="space-y-6 lb-anim">
       <ViewHeader C={C} title="Profil Proyek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Proyek", onClick: () => setProjModal("new") } : null} />
-      {projects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data proyek.</div>}
+      {projects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data proyek. Klik tombol tambah proyek untuk mulai.</div>}
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {projects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id);
@@ -873,7 +880,6 @@ function BudgetView({ C, projects, transactions, thisMonthKey, categories }) {
 
 function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin }) {
   const addFunds = (id) => {
-    // Meminta nilai nominal tabungan dalam string
     const amtStr = prompt("Tambah dana tabungan (Rp):");
     if (!amtStr) return;
     const n = Number(amtStr.replace(/[^0-9]/g, ""));
@@ -1246,14 +1252,13 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const remainingDebt = selectedDebt ? Math.max(0, selectedDebt.amount - selectedDebt.paidAmount) : 0;
 
   const submit = () => {
-    // Membaca nominal tanpa menghilangkan nol, hanya buang karakter selain angka
     const rawVal = String(amount).replace(/[^0-9]/g, ''); 
     const amt = Number(rawVal);
     if (!amt || amt <= 0) return;
 
     if (isEditing) {
       if (!note || !projectId) return;
-      onEditTransaction(editing.id, { type, projectId, category: type === "income" ? "belanja" : category, amount: amt, date, note });
+      onEditTransaction(editing.id, { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amt, date, note });
       onClose(); return;
     }
 
@@ -1263,16 +1268,15 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       onContributeGoal(goalId, amt);
     } else if (type === "debt") {
       const d = (debts || []).find((x) => x.id === debtId); if (!d) return;
-      onAddTransaction({ type: "expense", projectId: d.projectId, category: "bayar-hutang", amount: amt, date, note: note || `Cicilan hutang: ${d.name}` });
+      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amt, date, note: note || `Cicilan hutang: ${d.name}` });
       onPayDebt(debtId, amt);
     } else {
       if (!note || !projectId) return;
-      onAddTransaction({ type, projectId, category: type === "income" ? "belanja" : category, amount: amt, date, note });
+      onAddTransaction({ type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amt, date, note });
     }
     onClose();
   };
 
-  // Hapus opsi Bayar Tagihan (bill)
   const ALL_TYPES = [ { id: "expense", label: "Pengeluaran" }, { id: "income", label: "Pemasukan" }, { id: "goal", label: "Ke Tabungan" }, { id: "debt", label: "Bayar Hutang" }];
   const TYPES = isEditing ? ALL_TYPES.filter((t) => t.id === "expense" || t.id === "income") : ALL_TYPES;
   const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "debt" ? C.gold : C.coral);
@@ -1295,7 +1299,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
           {type === "expense" && (
             <Field label="Kategori" C={C}>
               <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
-                {categories.filter((c) => c.id !== "tabungan").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </Field>
           )}
@@ -1323,7 +1327,6 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
         </Field>
       )}
 
-      {/* Input nominal kini tetap string angka utuh sebelum disubmit (aman untuk nilai kecil seperti 10.000) */}
       <Field label="Jumlah (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Tanggal" C={C}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} /></Field>
       {(type === "expense" || type === "income") && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
@@ -1386,7 +1389,7 @@ function AddBillModal({ open, onClose, C, projects, categories, editing, onSave 
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Tagihan" : "Tagihan Baru"} C={C}>
       <Field label="Nama Tagihan" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Listrik PLN" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{categories.filter((c) => c.id !== "tabungan").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
+      <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
       <Field label="Jumlah (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
       <Field label="Jatuh Tempo" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
       <Field label="Pengulangan" C={C}><select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>{["Bulanan", "Tahunan", "Sekali"].map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
