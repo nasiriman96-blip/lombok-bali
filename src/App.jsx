@@ -6,7 +6,8 @@ import {
   Wrench, Zap, Users, Megaphone, Package, FileText, ShoppingBag,
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
-  CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag
+  CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
+  Calculator, Delete
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -150,6 +151,132 @@ function Field({ label, children, C }) {
   );
 }
 const inputStyle = (C) => ({ background: C.surface2, border: `1px solid ${C.border}`, color: C.text, width: "100%", padding: "10px 12px", borderRadius: "10px", fontSize: "14px", outline: "none" });
+
+// Popover kalkulator sederhana: hitung angka lalu terapkan hasilnya ke field nominal.
+function CalculatorPopover({ C, initial, onApply, onClose }) {
+  const [display, setDisplay] = useState(initial && initial !== "0" ? initial : "0");
+  const [acc, setAcc] = useState(null);
+  const [op, setOp] = useState(null);
+  const [resetNext, setResetNext] = useState(false);
+
+  const compute = (a, b, operator) => {
+    switch (operator) {
+      case "+": return a + b;
+      case "-": return a - b;
+      case "×": return a * b;
+      case "÷": return b === 0 ? a : a / b;
+      default: return b;
+    }
+  };
+
+  const pressDigit = (d) => {
+    if (resetNext) { setDisplay(d); setResetNext(false); return; }
+    setDisplay((prev) => (prev === "0" ? d : prev.length < 15 ? prev + d : prev));
+  };
+  const pressOp = (nextOp) => {
+    const current = Number(display);
+    if (acc !== null && op && !resetNext) {
+      const result = compute(acc, current, op);
+      setAcc(result);
+      setDisplay(String(result));
+    } else {
+      setAcc(current);
+    }
+    setOp(nextOp);
+    setResetNext(true);
+  };
+  const pressEquals = () => {
+    if (acc === null || !op) return;
+    const result = compute(acc, Number(display), op);
+    setDisplay(String(result));
+    setAcc(null);
+    setOp(null);
+    setResetNext(true);
+  };
+  const pressClear = () => { setDisplay("0"); setAcc(null); setOp(null); setResetNext(false); };
+  const pressBackspace = () => setDisplay((prev) => (prev.length > 1 ? prev.slice(0, -1) : "0"));
+  const applyResult = () => {
+    const finalValue = acc !== null && op ? compute(acc, Number(display), op) : Number(display);
+    onApply(Math.max(0, Math.round(finalValue)));
+  };
+
+  const formatted = display ? Number(display).toLocaleString("id-ID") : "0";
+  const BTN = "py-3 rounded-xl text-base font-medium transition-transform duration-100 active:scale-95";
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xs rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold" style={{ fontFamily: "Fraunces, serif" }}>Kalkulator</span>
+          <button onClick={onClose} style={{ color: C.textMuted }}><X size={18} /></button>
+        </div>
+        <div className="rounded-xl px-4 py-4 mb-3 text-right" style={{ background: C.surface2 }}>
+          {op && <div className="text-xs mb-1" style={{ color: C.textFaint }}>{Number(acc).toLocaleString("id-ID")} {op}</div>}
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 24, fontWeight: 600 }}>Rp {formatted}</div>
+        </div>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          <button onClick={pressClear} className={BTN} style={{ background: C.coralSoft, color: C.coral }}>C</button>
+          <button onClick={pressBackspace} className={BTN} style={{ background: C.surface2, color: C.textMuted }}><Delete size={16} className="mx-auto" /></button>
+          <button onClick={() => pressOp("÷")} className={BTN} style={{ background: op === "÷" ? C.jade : C.surface2, color: op === "÷" ? "#08130F" : C.jade }}>÷</button>
+          <button onClick={() => pressOp("×")} className={BTN} style={{ background: op === "×" ? C.jade : C.surface2, color: op === "×" ? "#08130F" : C.jade }}>×</button>
+
+          {["7", "8", "9"].map((d) => <button key={d} onClick={() => pressDigit(d)} className={BTN} style={{ background: C.surface2, color: C.text }}>{d}</button>)}
+          <button onClick={() => pressOp("-")} className={BTN} style={{ background: op === "-" ? C.jade : C.surface2, color: op === "-" ? "#08130F" : C.jade }}>-</button>
+
+          {["4", "5", "6"].map((d) => <button key={d} onClick={() => pressDigit(d)} className={BTN} style={{ background: C.surface2, color: C.text }}>{d}</button>)}
+          <button onClick={() => pressOp("+")} className={BTN} style={{ background: op === "+" ? C.jade : C.surface2, color: op === "+" ? "#08130F" : C.jade }}>+</button>
+
+          {["1", "2", "3"].map((d) => <button key={d} onClick={() => pressDigit(d)} className={BTN} style={{ background: C.surface2, color: C.text }}>{d}</button>)}
+          <button onClick={pressEquals} className="row-span-2 rounded-xl text-base font-semibold transition-transform duration-100 active:scale-95" style={{ background: C.jade, color: "#08130F" }}>=</button>
+
+          <button onClick={() => pressDigit("0")} className={`${BTN} col-span-2`} style={{ background: C.surface2, color: C.text }}>0</button>
+          <button onClick={() => pressDigit("000")} className={BTN} style={{ background: C.surface2, color: C.text }}>000</button>
+        </div>
+        <button onClick={applyResult} className="w-full py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>
+          Gunakan Nominal Ini
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Input nominal Rupiah: format otomatis dengan titik pemisah ribuan + tombol kalkulator.
+function AmountInput({ value, onChange, C, placeholder = "0" }) {
+  const [showCalc, setShowCalc] = useState(false);
+  const digits = String(value ?? "").replace(/[^\d]/g, "");
+  const formatted = digits ? Number(digits).toLocaleString("id-ID") : "";
+
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: C.textFaint }}>Rp</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={formatted}
+        onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+        placeholder={placeholder}
+        style={{ ...inputStyle(C), paddingLeft: 34, paddingRight: 42 }}
+      />
+      <button
+        type="button"
+        onClick={() => setShowCalc(true)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-transform duration-150 hover:scale-105 active:scale-95"
+        style={{ color: C.jade, background: C.jadeSoft }}
+        title="Buka kalkulator"
+      >
+        <Calculator size={15} />
+      </button>
+      {showCalc && (
+        <CalculatorPopover
+          C={C}
+          initial={digits || "0"}
+          onApply={(result) => { onChange(String(result)); setShowCalc(false); }}
+          onClose={() => setShowCalc(false)}
+        />
+      )}
+    </div>
+  );
+}
 
 const ACCOUNTS = [
   { username: "admin", password: "admin313", role: "admin", displayName: "Admin" },
@@ -1324,7 +1451,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
         </Field>
       )}
 
-      <Field label="Jumlah (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
       <Field label="Tanggal" C={C}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} /></Field>
       {(type === "expense" || type === "income") && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
       {(type === "goal" || type === "debt") && !isEditing && <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} /></Field>}
@@ -1355,7 +1482,7 @@ function AddGoalModal({ open, onClose, C, projects, editing, onSave }) {
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Target Tabungan" : "Target Tabungan Baru"} C={C}>
       <Field label="Nama Target" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Dana Renovasi" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}><option value="all">Seluruh Kawasan</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Target Dana (Rp)" C={C}><input type="text" inputMode="numeric" value={target} onChange={(e) => setTarget(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Target Dana (Rp)" C={C}><AmountInput value={target} onChange={setTarget} C={C} /></Field>
       <Field label="Tenggat" C={C}><input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Buat Target"}</button>
     </Modal>
@@ -1387,7 +1514,7 @@ function AddBillModal({ open, onClose, C, projects, categories, editing, onSave 
       <Field label="Nama Tagihan" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Listrik PLN" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
-      <Field label="Jumlah (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
       <Field label="Jatuh Tempo" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
       <Field label="Pengulangan" C={C}><select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>{["Bulanan", "Tahunan", "Sekali"].map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Tagihan"}</button>
@@ -1418,7 +1545,7 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Proyek" : "Proyek Baru"} C={C}>
       <Field label="Nama Proyek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
-      <Field label="Anggaran Bulanan (Rp)" C={C}><input type="text" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ proyek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat proyek" style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Proyek"}</button>
@@ -1451,8 +1578,8 @@ function AddDebtModal({ open, onClose, C, projects, editing, onSave }) {
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Hutang" : "Hutang Baru"} C={C}>
       <Field label="Nama Hutang / Kreditur" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Pinjaman Bank Modal Kerja" style={inputStyle(C)} /></Field>
       <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Total Hutang (Rp)" C={C}><input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
-      <Field label="Sudah Dibayar (Rp)" C={C}><input type="text" inputMode="numeric" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
+      <Field label="Total Hutang (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+      <Field label="Sudah Dibayar (Rp)" C={C}><AmountInput value={paidAmount} onChange={setPaidAmount} C={C} /></Field>
       <Field label="Jatuh Tempo / Target Lunas" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
       <Field label="Skema" C={C}><select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>{["Cicilan Bulanan", "Sekali", "Tahunan"].map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Hutang"}</button>
