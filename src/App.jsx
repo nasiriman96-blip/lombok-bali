@@ -55,6 +55,17 @@ const DEFAULT_CATEGORIES = [
   { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3", default: true },
 ];
 
+// Ikon (komponen React) tidak bisa disimpan sebagai JSON di Supabase, jadi hilang saat
+// data dimuat ulang. Fungsi ini memulihkan ikon kategori bawaan berdasarkan id, dan
+// memastikan hasilnya tidak pernah berupa array kosong (penyebab layar putih).
+const hydrateCategories = (loaded) => {
+  if (!Array.isArray(loaded) || loaded.length === 0) return DEFAULT_CATEGORIES;
+  return loaded.map((c) => {
+    const def = DEFAULT_CATEGORIES.find((d) => d.id === c.id);
+    return { ...c, icon: (def && def.icon) || c.icon || Tag };
+  });
+};
+
 const fmtIDR = (n) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n || 0);
 const fmtDate = (s) => new Date(s + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 const monthKey = (s) => s.slice(0, 7);
@@ -240,7 +251,7 @@ export default function App() {
         if (data.bills) setBills(data.bills);
         if (data.debts) setDebts(data.debts);
         if (data.people) setPeople(data.people);
-        if (data.categories) setCategories(data.categories);
+        if (data.categories) setCategories(hydrateCategories(data.categories));
       }
       setLoaded(true);
     })();
@@ -256,7 +267,7 @@ export default function App() {
       if (data.bills) setBills(data.bills);
       if (data.debts) setDebts(data.debts);
       if (data.people) setPeople(data.people);
-      if (data.categories) setCategories(data.categories);
+      if (data.categories) setCategories(hydrateCategories(data.categories));
       setSyncState("saved");
     });
     return () => {
@@ -276,7 +287,10 @@ export default function App() {
     return () => clearTimeout(saveTimer.current);
   }, [projects, transactions, goals, bills, debts, people, categories, loaded]);
 
-  const getCat = (id) => categories.find(c => c.id === id) || categories[categories.length - 1];
+  // Selalu kembalikan objek kategori yang valid, bahkan kalau daftar kategori kosong/korup
+  // (mis. akibat race condition saat menyimpan) — mencegah "cat.icon" crash di seluruh app.
+  const FALLBACK_CATEGORY = { id: "unknown", label: "Lainnya", icon: Tag, color: "#9CB0A6" };
+  const getCat = (id) => categories.find((c) => c.id === id) || categories[categories.length - 1] || FALLBACK_CATEGORY;
 
   const scopedTx = useMemo(
     () => (activeProject === "all" ? transactions : transactions.filter((t) => t.projectId === activeProject)),
@@ -1154,7 +1168,11 @@ function ManageCategoriesModal({ open, onClose, C, categories, setCategories }) 
   };
 
   const handleDelete = (id) => {
-    setCategories(prev => prev.filter(c => c.id !== id));
+    setCategories(prev => {
+      const next = prev.filter(c => c.id !== id);
+      // Jaga-jaga: jangan pernah biarkan daftar kategori jadi kosong total.
+      return next.length > 0 ? next : prev;
+    });
   };
 
   return (
