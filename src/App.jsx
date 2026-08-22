@@ -55,14 +55,22 @@ const DEFAULT_CATEGORIES = [
   { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3", default: true },
 ];
 
-// Ikon (komponen React) tidak bisa disimpan sebagai JSON di Supabase, jadi hilang saat
+// Komponen ikon lucide-react sebenarnya berbentuk OBJEK (forwardRef), bukan fungsi biasa.
+// Setelah lewat JSON.stringify (disimpan ke Supabase) lalu dimuat ulang, objek itu berubah
+// jadi objek kosong "{}" — yang tetap truthy, jadi "icon || Tag" gagal mendeteksinya sebagai
+// rusak. Fungsi ini memastikan nilainya benar-benar komponen React yang valid.
+const isValidIcon = (icon) =>
+  typeof icon === "function" || (icon && typeof icon === "object" && !!icon.$$typeof);
+
+// Ikon (komponen React) tidak bisa disimpan sebagai JSON di Supabase, jadi rusak saat
 // data dimuat ulang. Fungsi ini memulihkan ikon kategori bawaan berdasarkan id, dan
 // memastikan hasilnya tidak pernah berupa array kosong (penyebab layar putih).
 const hydrateCategories = (loaded) => {
   if (!Array.isArray(loaded) || loaded.length === 0) return DEFAULT_CATEGORIES;
   return loaded.map((c) => {
     const def = DEFAULT_CATEGORIES.find((d) => d.id === c.id);
-    return { ...c, icon: (def && def.icon) || c.icon || Tag };
+    if (def) return { ...c, icon: def.icon };
+    return { ...c, icon: isValidIcon(c.icon) ? c.icon : Tag };
   });
 };
 
@@ -649,7 +657,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
             {recent.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textFaint }}>Belum ada transaksi.</div>}
             {recent.map((t) => {
               const cat = getCat(t.category);
-              const Icon = cat.icon || Tag;
+              const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
               return (
                 <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
@@ -783,7 +791,7 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
         {rows.length === 0 && <div className="p-8 text-center text-sm" style={{ color: C.textFaint }}>Tidak ada transaksi ditemukan.</div>}
         {rows.map((t, i) => {
           const cat = getCat(t.category);
-          const Icon = cat.icon || Tag;
+          const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
           return (
             <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3.5 transition-colors duration-150" style={{ borderTop: i === 0 ? "none" : `1px solid ${C.borderSoft}` }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
@@ -842,7 +850,7 @@ function BudgetView({ C, projects, transactions, thisMonthKey, categories }) {
               <div className="mt-4 space-y-2.5">
                 {catRows.length === 0 && <div className="text-xs" style={{ color: C.textFaint }}>Belum ada pengeluaran bulan ini.</div>}
                 {catRows.map((c) => {
-                  const Icon = c.icon || Tag;
+                  const Icon = isValidIcon(c.icon) ? c.icon : Tag;
                   const catPct = p.budget ? (c.value / p.budget) * 100 : 0;
                   return (
                     <div key={c.id}>
@@ -930,7 +938,7 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {sorted.map((b) => {
           const cat = getCat(b.category || "belanja");
-          const CatIcon = cat.icon || Tag;
+          const CatIcon = isValidIcon(cat.icon) ? cat.icon : Tag;
           const isPaid = b.paidAmount >= b.amount;
           const due = new Date(b.dueDate);
           const overdue = !isPaid && due < today;
@@ -1179,7 +1187,7 @@ function ManageCategoriesModal({ open, onClose, C, categories, setCategories }) 
     <Modal open={open} onClose={onClose} title="Kelola Kategori" C={C}>
       <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-1">
         {categories.map(c => {
-          const CatIcon = c.icon || Tag;
+          const CatIcon = isValidIcon(c.icon) ? c.icon : Tag;
           return (
             <div key={c.id} className="flex items-center justify-between p-2.5 rounded-lg" style={{background: C.surface2, border: `1px solid ${C.border}`}}>
               <div className="flex items-center gap-2.5 text-sm">
