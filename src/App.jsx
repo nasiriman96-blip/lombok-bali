@@ -448,6 +448,11 @@ export default function App() {
     [projects, activeProject]
   );
 
+  const totalModal = useMemo(
+    () => (activeProject === "all" ? projects.reduce((s, p) => s + (p.modal || 0), 0) : projects.find((p) => p.id === activeProject)?.modal || 0),
+    [projects, activeProject]
+  );
+
   const categoryBreakdown = useMemo(() => {
     const map = {};
     scopedTx.filter((t) => t.type === "expense").forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
@@ -546,15 +551,15 @@ export default function App() {
 
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
-          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
+          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, totalModal, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />}
           {tab === "transactions" && <TransactionsView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true) }} />}
-          {tab === "budget" && <BudgetView {...{ C, projects, transactions, thisMonthKey, categories }} />}
-          {tab === "savings" && <SavingsView {...{ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin }} />}
-          {tab === "bills" && <BillsView {...{ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat }} />}
-          {tab === "debts" && <DebtsView {...{ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin }} />}
-          {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin }} />}
-          {tab === "analytics" && <AnalyticsView {...{ C, categoryBreakdown, monthlyTrend, projectComparison, totals }} />}
+          {tab === "budget" && <BudgetView {...{ C, projects, transactions, thisMonthKey, categories, activeProject }} />}
+          {tab === "savings" && <SavingsView {...{ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject }} />}
+          {tab === "bills" && <BillsView {...{ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat, activeProject }} />}
+          {tab === "debts" && <DebtsView {...{ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin, activeProject }} />}
+          {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
+          {tab === "analytics" && <AnalyticsView {...{ C, categoryBreakdown, monthlyTrend, projectComparison, totals, activeProject, projectName }} />}
         </main>
       </div>
 
@@ -656,7 +661,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
   );
 }
 
-function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }) {
+function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, totalModal, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }) {
   const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
   const recent = scopedTx.slice(0, 5);
   const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
@@ -696,6 +701,10 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 32, fontWeight: 600, color: totals.balance >= 0 ? C.jade : C.coral }}>{fmtIDR(totals.balance)}</div>
             </div>
             <div className="flex gap-6">
+              <div>
+                <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><Landmark size={14} color={C.gold} /> Modal Awal</div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600, color: C.gold }}>{fmtIDR(totalModal)}</div>
+              </div>
               <div>
                 <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><ArrowUpRight size={14} color={C.jade} /> Pemasukan</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600 }}>{fmtIDR(totals.income)}</div>
@@ -855,6 +864,10 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 17 }}>{p.name}</div>
                   <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textFaint }}><MapPin size={11} />{p.location}</div>
                   <p className="text-xs mb-4" style={{ color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</p>
+                  <div className="mb-3 px-3 py-2 rounded-lg flex items-center justify-between" style={{ background: C.goldSoft }}>
+                    <span className="text-xs" style={{ color: C.gold }}>Modal Awal</span>
+                    <span className="text-sm font-semibold" style={{ color: C.gold, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(p.modal || 0)}</span>
+                  </div>
                   <div className="grid grid-cols-2 gap-3 text-xs mb-3">
                     <div>
                       <div style={{ color: C.textFaint }}>Pemasukan</div>
@@ -947,13 +960,14 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
   );
 }
 
-function BudgetView({ C, projects, transactions, thisMonthKey, categories }) {
+function BudgetView({ C, projects, transactions, thisMonthKey, categories, activeProject }) {
+  const shownProjects = activeProject === "all" ? projects : projects.filter((p) => p.id === activeProject);
   return (
     <div className="space-y-5 lb-anim">
       <ViewHeader C={C} title="Anggaran Bulanan" subtitle={`Realisasi vs anggaran untuk ${monthLabel(thisMonthKey)}`} />
-      {projects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data proyek.</div>}
+      {shownProjects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data proyek.</div>}
       <div className="grid lg:grid-cols-2 gap-5">
-        {projects.map((p) => {
+        {shownProjects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id && t.type === "expense" && monthKey(t.date) === thisMonthKey);
           const spent = tx.reduce((s, t) => s + t.amount, 0);
           const pct = p.budget ? (spent / p.budget) * 100 : 0;
@@ -998,7 +1012,8 @@ function BudgetView({ C, projects, transactions, thisMonthKey, categories }) {
   );
 }
 
-function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin }) {
+function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject }) {
+  const shownGoals = activeProject === "all" ? goals : goals.filter((g) => g.projectId === activeProject || g.projectId === "all");
   const addFunds = (id) => {
     const amtStr = prompt("Tambah dana tabungan (Rp):");
     if (!amtStr) return;
@@ -1009,9 +1024,9 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
   return (
     <div className="space-y-5 lb-anim">
       <ViewHeader C={C} title="Target Tabungan" subtitle="Rencana dana jangka panjang kawasan" action={isAdmin ? { label: "Tambah Target", onClick: () => setGoalModal("new") } : null} />
-      {goals.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data tabungan.</div>}
+      {shownGoals.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data tabungan.</div>}
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {goals.map((g) => {
+        {shownGoals.map((g) => {
           const pct = g.target ? (g.current / g.target) * 100 : 0;
           const daysLeft = Math.ceil((new Date(g.deadline) - new Date()) / 86400000);
           return (
@@ -1044,9 +1059,9 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
   );
 }
 
-function BillsView({ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat }) {
+function BillsView({ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat, activeProject }) {
   const today = new Date(new Date().toDateString());
-  const sorted = [...bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const sorted = [...bills].filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const addPayment = (id) => {
     const bill = bills.find((b) => b.id === id);
@@ -1109,9 +1124,9 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
   );
 }
 
-function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin }) {
+function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin, activeProject }) {
   const today = new Date(new Date().toDateString());
-  const sorted = [...debts].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const sorted = [...debts].filter((d) => activeProject === "all" || d.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const addPayment = (id) => {
     const debt = debts.find((d) => d.id === id);
@@ -1175,9 +1190,9 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
 const PEOPLE_CATEGORIES = [{ id: "staff-l", label: "Staff Laki-laki" }, { id: "staff-p", label: "Staff Perempuan" }, { id: "anak", label: "Anak" }];
 const peopleCatLabel = (id) => PEOPLE_CATEGORIES.find((c) => c.id === id)?.label || id;
 
-function PeopleView({ C, people, setPeople, projects, projectName, setPersonModal, isAdmin }) {
+function PeopleView({ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }) {
   const [filter, setFilter] = useState("all");
-  const rows = people.filter((p) => filter === "all" || p.category === filter);
+  const rows = people.filter((p) => (filter === "all" || p.category === filter) && (activeProject === "all" || p.projectId === activeProject));
 
   return (
     <div className="space-y-5 lb-anim">
@@ -1220,25 +1235,42 @@ function PeopleView({ C, people, setPeople, projects, projectName, setPersonModa
   );
 }
 
-function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, totals }) {
+function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, totals, activeProject, projectName }) {
   return (
     <div className="space-y-6 lb-anim">
-      <ViewHeader C={C} title="Analitik Keuangan" subtitle="Wawasan menyeluruh atas kinerja keuangan kawasan" />
+      <ViewHeader C={C} title="Analitik Keuangan" subtitle={activeProject === "all" ? "Wawasan menyeluruh atas kinerja keuangan kawasan" : `Wawasan keuangan untuk ${projectName(activeProject)}`} />
       <div className="grid lg:grid-cols-2 gap-6">
-        <Card C={C}>
-          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Anggaran vs Realisasi per Proyek</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={projectComparison}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-              <XAxis dataKey="name" stroke={C.textFaint} fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke={C.textFaint} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-              <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Anggaran" fill={C.blue} radius={[6, 6, 0, 0]} />
-              <Bar dataKey="Terpakai" fill={C.gold} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+        {activeProject === "all" ? (
+          <Card C={C}>
+            <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Anggaran vs Realisasi per Proyek</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={projectComparison}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                <XAxis dataKey="name" stroke={C.textFaint} fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke={C.textFaint} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Anggaran" fill={C.blue} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Terpakai" fill={C.gold} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        ) : (
+          <Card C={C}>
+            <h3 className="mb-1" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Ringkasan Proyek Ini</h3>
+            <p className="text-xs mb-4" style={{ color: C.textFaint }}>Grafik perbandingan antar-proyek disembunyikan karena setiap proyek dipisah total. Pilih "Semua Proyek" di sidebar untuk membandingkan.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs mb-1" style={{ color: C.textFaint }}>Pemasukan</div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.jade }}>{fmtIDR(totals.income)}</div>
+              </div>
+              <div>
+                <div className="text-xs mb-1" style={{ color: C.textFaint }}>Pengeluaran</div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.coral }}>{fmtIDR(totals.expense)}</div>
+              </div>
+            </div>
+          </Card>
+        )}
         <Card C={C}>
           <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Komposisi Pengeluaran</h3>
           <ResponsiveContainer width="100%" height={260}>
@@ -1525,26 +1557,29 @@ function AddBillModal({ open, onClose, C, projects, categories, editing, onSave 
 function AddProjectModal({ open, onClose, C, editing, onSave }) {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
+  const [modal, setModal] = useState("");
   const [budget, setBudget] = useState("");
   const [manager, setManager] = useState("");
   const [desc, setDesc] = useState("");
   const isEditing = !!editing;
 
   useEffect(() => {
-    if (open && editing) { setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || ""); } 
-    else if (open && !editing) { setName(""); setLocation(""); setBudget(""); setManager(""); setDesc(""); }
+    if (open && editing) { setName(editing.name); setLocation(editing.location); setModal(String(editing.modal || 0)); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || ""); } 
+    else if (open && !editing) { setName(""); setLocation(""); setModal(""); setBudget(""); setManager(""); setDesc(""); }
   }, [open, editing]);
 
   const submit = () => {
     const b = Number(String(budget).replace(/[^0-9]/g, ''));
+    const m = Number(String(modal).replace(/[^0-9]/g, '')) || 0;
     if (!name || !location || !b) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc }); onClose();
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, modal: m, budget: b, manager, desc }); onClose();
   };
 
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Proyek" : "Proyek Baru"} C={C}>
       <Field label="Nama Proyek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
+      <Field label="Modal Awal (Rp)" C={C}><AmountInput value={modal} onChange={setModal} C={C} /></Field>
       <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ proyek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat proyek" style={inputStyle(C)} /></Field>
