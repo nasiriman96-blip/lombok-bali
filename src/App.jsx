@@ -8,7 +8,7 @@ import {
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
   CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete, Cake, Handshake, Banknote
+  Calculator, Delete, Cake, Split, Coins, TrendingDown as ProfitIcon
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -53,18 +53,18 @@ const DEFAULT_CATEGORIES = [
   { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3", default: true },
   { id: "sewa-rumah", label: "Sewa Rumah", icon: Home, color: "#F0725A", default: true },
   { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3", default: true },
-  { id: "penarikan-pemasukan", label: "Penarikan Pemasukan", icon: Handshake, color: "#E0B15C", default: true },
 ];
+
+// Persentase default pembagian pemasukan: 70% modal, 30% keuntungan.
+// Bisa di-overwrite per projek lewat field modalPercent.
+const DEFAULT_MODAL_PERCENT = 70;
 
 const isValidIcon = (icon) =>
   typeof icon === "function" || (icon && typeof icon === "object" && !!icon.$$typeof);
 
 const hydrateCategories = (loaded) => {
   if (!Array.isArray(loaded) || loaded.length === 0) return DEFAULT_CATEGORIES;
-  // pastikan kategori default "penarikan-pemasukan" selalu ada
-  const hasWithdraw = loaded.some((c) => c.id === "penarikan-pemasukan");
-  const merged = hasWithdraw ? loaded : [...loaded, DEFAULT_CATEGORIES.find((d) => d.id === "penarikan-pemasukan")];
-  return merged.map((c) => {
+  return loaded.map((c) => {
     const def = DEFAULT_CATEGORIES.find((d) => d.id === c.id);
     if (def) return { ...c, icon: def.icon };
     return { ...c, icon: isValidIcon(c.icon) ? c.icon : Tag };
@@ -93,6 +93,23 @@ const monthLabel = (key) => {
 
 const uid = (p) => p + Math.random().toString(36).slice(2, 9);
 
+// Helper: hitung split pemasukan sebuah transaksi.
+// Kalau transaksi bukan pemasukan, return null.
+// Kalau transaksi lama belum punya split (backward compat), anggap 100% modal.
+const splitIncome = (tx, project) => {
+  if (!tx || tx.type !== "income") return null;
+  const amt = tx.amount || 0;
+  // Kalau sudah punya split tersimpan, pakai itu
+  if (tx.splitModal != null && tx.splitProfit != null) {
+    return { modal: tx.splitModal, profit: tx.splitProfit, modalPct: tx.splitModalPct ?? DEFAULT_MODAL_PERCENT };
+  }
+  // Backward compat: pakai percent projek (atau default)
+  const pct = project?.modalPercent ?? DEFAULT_MODAL_PERCENT;
+  const modal = Math.round((amt * pct) / 100);
+  const profit = amt - modal;
+  return { modal, profit, modalPct: pct };
+};
+
 function ContourLines({ color = "#34D8A3", opacity = 0.14, className = "" }) {
   const paths = [
     "M-20,120 C 80,60 160,180 260,100 S 420,40 520,110",
@@ -118,8 +135,9 @@ function Badge({ children, tone = "neutral", C }) {
     jade: { bg: C.jadeSoft, fg: C.jade },
     gold: { bg: C.goldSoft, fg: C.gold },
     coral: { bg: C.coralSoft, fg: C.coral },
+    blue: { bg: `${C.blue}22`, fg: C.blue },
   };
-  const s = map[tone];
+  const s = map[tone] || map.neutral;
   return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: s.bg, color: s.fg }}>{children}</span>;
 }
 
@@ -409,7 +427,6 @@ export default function App() {
   const [personModal, setPersonModal] = useState(null);
   const [projModal, setProjModal] = useState(null);
   const [catModal, setCatModal] = useState(false);
-  const [withdrawModal, setWithdrawModal] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
@@ -461,17 +478,27 @@ export default function App() {
 
   const FALLBACK_CATEGORY = { id: "unknown", label: "Lainnya", icon: Tag, color: "#9CB0A6" };
   const getCat = (id) => categories.find((c) => c.id === id) || categories[categories.length - 1] || FALLBACK_CATEGORY;
+  const getProject = (id) => projects.find((p) => p.id === id);
 
   const scopedTx = useMemo(
     () => (activeProject === "all" ? transactions : transactions.filter((t) => t.projectId === activeProject)),
     [transactions, activeProject]
   );
 
+  // Totals dengan breakdown modal vs keuntungan
   const totals = useMemo(() => {
-    const income = scopedTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-    const expense = scopedTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-    return { income, expense, balance: income - expense };
-  }, [scopedTx]);
+    let income = 0, expense = 0, modal = 0, profit = 0;
+    scopedTx.forEach((t) => {
+      if (t.type === "income") {
+        income += t.amount;
+        const s = splitIncome(t, getProject(t.projectId));
+        if (s) { modal += s.modal; profit += s.profit; }
+      } else {
+        expense += t.amount;
+      }
+    });
+    return { income, expense, balance: income - expense, modal, profit };
+  }, [scopedTx, projects]);
 
   const thisMonthKey = new Date().toISOString().slice(0, 7);
   const monthSpend = useMemo(
@@ -495,12 +522,17 @@ export default function App() {
       .filter((t) => activeProject === "all" || t.projectId === activeProject)
       .forEach((t) => {
         const k = monthKey(t.date);
-        if (!map[k]) map[k] = { month: k, Pemasukan: 0, Pengeluaran: 0 };
-        if (t.type === "income") map[k].Pemasukan += t.amount;
-        else map[k].Pengeluaran += t.amount;
+        if (!map[k]) map[k] = { month: k, Pemasukan: 0, Pengeluaran: 0, Modal: 0, Keuntungan: 0 };
+        if (t.type === "income") {
+          map[k].Pemasukan += t.amount;
+          const s = splitIncome(t, getProject(t.projectId));
+          if (s) { map[k].Modal += s.modal; map[k].Keuntungan += s.profit; }
+        } else {
+          map[k].Pengeluaran += t.amount;
+        }
       });
     return Object.values(map).sort((a, b) => a.month.localeCompare(b.month)).map((r) => ({ ...r, label: monthLabel(r.month) }));
-  }, [transactions, activeProject]);
+  }, [transactions, activeProject, projects]);
 
   const projectComparison = useMemo(
     () => projects.map((p) => {
@@ -559,9 +591,9 @@ export default function App() {
           </div>
         </div>
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
-          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
-          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, setWithdrawModal }} />}
-          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals }} />}
+          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
+          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }} />}
+          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
         </main>
       </div>
@@ -581,24 +613,7 @@ export default function App() {
       <AddBillModal open={!!billModal} editing={billModal && billModal !== "new" ? billModal : null} onClose={() => setBillModal(null)} C={C} projects={projects} categories={categories} onSave={(data) => { if (data.id) setBills((prev) => prev.map((b) => (b.id === data.id ? { ...b, ...data } : b))); else setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...data }, ...prev]); }} />
       <AddDebtModal open={!!debtModal} editing={debtModal && debtModal !== "new" ? debtModal : null} onClose={() => setDebtModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setDebts((prev) => prev.map((d) => (d.id === data.id ? { ...d, ...data } : d))); else setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...data }, ...prev]); }} />
       <AddPersonModal open={!!personModal} editing={personModal && personModal !== "new" ? personModal : null} onClose={() => setPersonModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setPeople((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setPeople((prev) => [{ id: uid("ah"), ...data }, ...prev]); }} />
-      <AddProjectModal open={!!projModal} editing={projModal && projModal !== "new" ? projModal : null} onClose={() => setProjModal(null)} C={C} onSave={(data) => { if (data.id) setProjects((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...data }]); }} />
-      <WithdrawFundsModal
-        open={!!withdrawModal}
-        project={withdrawModal}
-        transactions={transactions}
-        categories={categories}
-        C={C}
-        onClose={() => setWithdrawModal(null)}
-        onConfirm={(txs, updatedProject) => {
-          if (txs.length > 0) {
-            setTransactions((prev) => [...txs, ...prev]);
-          }
-          if (updatedProject) {
-            setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
-          }
-          setWithdrawModal(null);
-        }}
-      />
+      <AddProjectModal open={!!projModal} editing={projModal && projModal !== "new" ? projModal : null} onClose={() => setProjModal(null)} C={C} onSave={(data) => { if (data.id) setProjects((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], modalPercent: DEFAULT_MODAL_PERCENT, ...data }]); }} />
     </div>
   );
 }
@@ -678,7 +693,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
   );
 }
 
-function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }) {
+function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }) {
   const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
   const recent = scopedTx.slice(0, 5);
   const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
@@ -687,6 +702,15 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
     .filter((x) => x.bday && x.bday.days <= 30)
     .sort((a, b) => a.bday.days - b.bday.days)
     .slice(0, 5);
+
+  // Data untuk chart Modal vs Keuntungan
+  const modalVsProfitData = useMemo(() => {
+    if (totals.income === 0) return [];
+    return [
+      { name: "Modal", value: totals.modal, color: C.blue },
+      { name: "Keuntungan", value: totals.profit, color: C.jade },
+    ];
+  }, [totals, C]);
 
   return (
     <div className="space-y-6 lb-anim">
@@ -734,7 +758,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
               <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 4 }}>Saldo Bersih</div>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 32, fontWeight: 600, color: totals.balance >= 0 ? C.jade : C.coral }}>{fmtIDR(totals.balance)}</div>
             </div>
-            <div className="flex gap-6">
+            <div className="flex gap-6 flex-wrap">
               <div>
                 <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><ArrowUpRight size={14} color={C.jade} /> Pemasukan</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600, color: C.text }}>{fmtIDR(totals.income)}</div>
@@ -745,6 +769,28 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
               </div>
             </div>
           </div>
+          {totals.income > 0 && (
+            <div className="mt-5 pt-5 grid grid-cols-2 gap-4" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5" style={{ color: C.blue, fontSize: 12, fontWeight: 500 }}>
+                  <Coins size={13} /> Porsi Modal
+                </div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 600, color: C.text }}>{fmtIDR(totals.modal)}</div>
+                <div className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>
+                  {totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}% dari pemasukan
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5" style={{ color: C.jade, fontSize: 12, fontWeight: 500 }}>
+                  <TrendingUp size={13} /> Porsi Keuntungan
+                </div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 600, color: C.text }}>{fmtIDR(totals.profit)}</div>
+                <div className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>
+                  {totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}% dari pemasukan
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -787,6 +833,31 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
           }
         </Card>
         <Card C={C} className="lg:col-span-2">
+          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Pembagian Pemasukan</h3>
+          {modalVsProfitData.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada pemasukan</div> :
+            <>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={modalVsProfitData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={68} paddingAngle={3}>
+                    {modalVsProfitData.map((c, i) => <Cell key={i} fill={c.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5 mt-2">
+                {modalVsProfitData.map((c) => (
+                  <div key={c.name} className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5" style={{ color: C.textMuted }}><span className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.name}</span>
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(c.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          }
+        </Card>
+      </div>
+      <div className="grid lg:grid-cols-5 gap-6">
+        <Card C={C} className="lg:col-span-3">
           <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Pengeluaran per Kategori</h3>
           {categoryBreakdown.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data</div> :
             <>
@@ -808,35 +879,6 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
               </div>
             </>
           }
-        </Card>
-      </div>
-      <div className="grid lg:grid-cols-5 gap-6">
-        <Card C={C} className="lg:col-span-3" pad="p-0">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Transaksi Terbaru</h3>
-            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Lihat semua</button>
-          </div>
-          <div>
-            {recent.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Belum ada transaksi.</div>}
-            {recent.map((t) => {
-              const cat = getCat(t.category);
-              const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
-              return (
-                <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
-                    {t.type === "income" ? <TrendingUp size={15} color={C.jade} /> : <Icon size={15} color={cat.color} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" style={{ color: C.text }}>{t.note}</div>
-                    <div className="text-xs" style={{ color: C.textMuted }}>{projectName(t.projectId)} · {fmtDate(t.date)}</div>
-                  </div>
-                  <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: t.type === "income" ? C.jade : C.text }}>
-                    {t.type === "income" ? "+" : "-"}{fmtIDR(t.amount)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </Card>
         <Card C={C} className="lg:col-span-2" pad="p-0">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -863,6 +905,41 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
           </div>
         </Card>
       </div>
+      <Card C={C} pad="p-0">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Transaksi Terbaru</h3>
+          <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Lihat semua</button>
+        </div>
+        <div>
+          {recent.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Belum ada transaksi.</div>}
+          {recent.map((t) => {
+            const cat = getCat(t.category);
+            const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
+            const split = t.type === "income" ? splitIncome(t, getProject(t.projectId)) : null;
+            return (
+              <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
+                  {t.type === "income" ? <TrendingUp size={15} color={C.jade} /> : <Icon size={15} color={cat.color} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium truncate" style={{ color: C.text }}>{t.note}</div>
+                  <div className="text-xs" style={{ color: C.textMuted }}>
+                    {projectName(t.projectId)} · {fmtDate(t.date)}
+                    {split && (
+                      <span className="ml-2" style={{ color: C.textMuted }}>
+                        · <span style={{ color: C.blue }}>M: {fmtIDR(split.modal)}</span> · <span style={{ color: C.jade }}>K: {fmtIDR(split.profit)}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: t.type === "income" ? C.jade : C.text }}>
+                  {t.type === "income" ? "+" : "-"}{fmtIDR(t.amount)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -906,191 +983,31 @@ function KeuanganView(props) {
   );
 }
 
-// Modal untuk menarik sebagian pemasukan projek sebagai pengeluaran otomatis.
-// Admin input persentase (0-100), sistem hitung nominalnya dari total pemasukan projek,
-// lalu membuat transaksi pengeluaran dengan kategori "Penarikan Pemasukan".
-function WithdrawFundsModal({ open, project, transactions, categories, C, onClose, onConfirm }) {
-  const [percent, setPercent] = useState("");
-  const [note, setNote] = useState("");
-  const [rememberPercent, setRememberPercent] = useState(true);
-
-  // Reset state setiap modal dibuka untuk projek baru
-  useEffect(() => {
-    if (open && project) {
-      // Pakai persentase default yang tersimpan (kalau ada), kalau tidak kosongkan
-      setPercent(project.defaultWithdrawPct != null ? String(project.defaultWithdrawPct) : "");
-      setNote("");
-      setRememberPercent(true);
-    }
-  }, [open, project]);
-
-  if (!project) return null;
-
-  // Hitung total pemasukan projek ini
-  const projectIncome = transactions
-    .filter((t) => t.projectId === project.id && t.type === "income")
-    .reduce((s, t) => s + t.amount, 0);
-
-  const projectExpense = transactions
-    .filter((t) => t.projectId === project.id && t.type === "expense")
-    .reduce((s, t) => s + t.amount, 0);
-
-  const projectBalance = projectIncome - projectExpense;
-
-  // Pastikan kategori "penarikan-pemasukan" ada (fallback ke kategori pertama)
-  const withdrawCat = categories.find((c) => c.id === "penarikan-pemasukan") || categories[0];
-
-  const pctNum = parseFloat(String(percent).replace(",", "."));
-  const isValidPct = !isNaN(pctNum) && pctNum >= 0 && pctNum <= 100;
-  const withdrawAmount = isValidPct ? Math.round((projectIncome * pctNum) / 100) : 0;
-  const canWithdraw = withdrawAmount > 0 && withdrawAmount <= projectBalance;
-
-  const submit = () => {
-    if (!canWithdraw) return;
-
-    const tx = {
-      type: "expense",
-      projectId: project.id,
-      category: withdrawCat.id,
-      amount: withdrawAmount,
-      date: new Date().toISOString().slice(0, 10),
-      note: note?.trim() || `Penarikan ${pctNum}% dari pemasukan projek ${project.name}`,
-    };
-
-    const updatedProject = rememberPercent && isValidPct
-      ? { ...project, defaultWithdrawPct: pctNum }
-      : project;
-
-    onConfirm([tx], updatedProject);
-  };
-
-  const quickPercents = [5, 10, 15, 20, 25, 50];
-
-  return (
-    <Modal open={open} onClose={onClose} title="Tarik Dana dari Pemasukan" C={C}>
-      <div className="mb-4 px-3 py-3 rounded-lg" style={{ background: `linear-gradient(135deg, ${project.color}22, ${project.color}08)`, border: `1px solid ${C.border}` }}>
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: project.color }}>
-            <Building2 size={15} color="#08130F" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold truncate" style={{ fontFamily: "Fraunces, serif", fontSize: 15, color: C.text }}>{project.name}</div>
-            <div className="text-xs flex items-center gap-1" style={{ color: C.textMuted }}><MapPin size={10} />{project.location}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <div>
-            <div style={{ color: C.textMuted }}>Pemasukan</div>
-            <div className="font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(projectIncome)}</div>
-          </div>
-          <div>
-            <div style={{ color: C.textMuted }}>Pengeluaran</div>
-            <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(projectExpense)}</div>
-          </div>
-          <div>
-            <div style={{ color: C.textMuted }}>Saldo</div>
-            <div className="font-semibold" style={{ color: projectBalance >= 0 ? C.jade : C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(projectBalance)}</div>
-          </div>
-        </div>
-      </div>
-
-      {projectIncome === 0 && (
-        <div className="mb-4 px-3 py-2.5 rounded-lg text-xs" style={{ background: C.coralSoft, color: C.coral }}>
-          Projek ini belum memiliki pemasukan. Tambahkan transaksi pemasukan terlebih dahulu.
-        </div>
-      )}
-
-      <Field label="Persentase yang ditarik" C={C}>
-        <div className="relative">
-          <input
-            type="text"
-            inputMode="decimal"
-            value={percent}
-            onChange={(e) => setPercent(e.target.value)}
-            placeholder="Contoh: 10"
-            style={{ ...inputStyle(C), paddingRight: 32 }}
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: C.textMuted }}>%</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {quickPercents.map((q) => (
-            <button
-              key={q}
-              onClick={() => setPercent(String(q))}
-              className="px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 hover:scale-105"
-              style={{ background: pctNum === q ? C.jadeSoft : C.surface2, color: pctNum === q ? C.jade : C.textMuted, border: `1px solid ${C.border}` }}
-            >
-              {q}%
-            </button>
-          ))}
-        </div>
-      </Field>
-
-      {isValidPct && (
-        <div className="mb-4 px-3 py-3 rounded-lg" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span style={{ color: C.textMuted }}>Nominal yang akan ditarik:</span>
-            <Banknote size={14} color={C.gold} />
-          </div>
-          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: C.gold }}>
-            {fmtIDR(withdrawAmount)}
-          </div>
-          <div className="text-xs mt-1.5" style={{ color: C.textMuted }}>
-            = {pctNum}% × {fmtIDR(projectIncome)}
-          </div>
-          {withdrawAmount > projectBalance && (
-            <div className="text-xs mt-2 px-2 py-1.5 rounded" style={{ background: C.coralSoft, color: C.coral }}>
-              ⚠️ Melebihi saldo projek ({fmtIDR(projectBalance)})
-            </div>
-          )}
-        </div>
-      )}
-
-      <Field label="Catatan penarikan (opsional)" C={C}>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder={`Otomatis: Penarikan ${percent || "X"}% dari pemasukan ${project.name}`}
-          style={inputStyle(C)}
-        />
-      </Field>
-
-      <label className="flex items-start gap-2 mb-4 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={rememberPercent}
-          onChange={(e) => setRememberPercent(e.target.checked)}
-          className="mt-0.5"
-          style={{ accentColor: C.jade }}
-        />
-        <span className="text-xs" style={{ color: C.textMuted, lineHeight: 1.5 }}>
-          Ingat persentase <strong style={{ color: C.text }}>{percent || "0"}%</strong> sebagai default untuk projek ini di waktu mendatang.
-        </span>
-      </label>
-
-      <button
-        onClick={submit}
-        disabled={!canWithdraw}
-        className="w-full py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2"
-        style={{ background: canWithdraw ? C.gold : C.surface2, color: canWithdraw ? "#08130F" : C.textMuted }}
-      >
-        <Handshake size={15} /> Tarik {fmtIDR(withdrawAmount)}
-      </button>
-    </Modal>
-  );
-}
-
-function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, setWithdrawModal }) {
+function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }) {
   return (
     <div className="space-y-6 lb-anim">
       <ViewHeader C={C} title="Profil Projek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Projek", onClick: () => setProjModal("new") } : null} />
+      {isAdmin && (
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ background: C.jadeSoft, border: `1px solid ${C.border}` }}>
+          <Split size={14} color={C.jade} className="shrink-0 mt-0.5" />
+          <span style={{ color: C.textMuted, lineHeight: 1.5 }}>
+            <strong style={{ color: C.jade }}>Pembagian otomatis:</strong> Setiap pemasukan akan otomatis dipisah menjadi <strong style={{ color: C.blue }}>Modal</strong> dan <strong style={{ color: C.jade }}>Keuntungan</strong> sesuai persentase yang diatur di setiap projek (default {DEFAULT_MODAL_PERCENT}% modal). Klik <Pencil size={10} style={{ display: "inline", verticalAlign: "middle" }} /> di kartu projek untuk mengubah persentase.
+          </span>
+        </div>
+      )}
       {projects.length === 0 && <div className="text-sm" style={{ color: C.textMuted }}>Belum ada data projek. Klik tombol tambah projek untuk mulai.</div>}
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {projects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id);
           const spent = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-          const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-          const balance = income - spent;
+          let totalModal = 0, totalProfit = 0;
+          tx.filter((t) => t.type === "income").forEach((t) => {
+            const s = splitIncome(t, p);
+            if (s) { totalModal += s.modal; totalProfit += s.profit; }
+          });
+          const totalIncome = totalModal + totalProfit;
+          const balance = totalIncome - spent;
+          const pct = p.modalPercent ?? DEFAULT_MODAL_PERCENT;
 
           return (
             <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group transition-transform duration-200 hover:-translate-y-1" style={{ position: "relative" }}>
@@ -1104,39 +1021,50 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                 </div>
                 <div className="p-4">
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: C.text }}>{p.name}</div>
-                  <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textMuted }}><MapPin size={11} />{p.location}</div>
+                  <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textMuted }}>
+                    <MapPin size={11} />{p.location}
+                    <span className="ml-auto flex items-center gap-1" style={{ color: C.blue }}>
+                      <Split size={10} /> {pct}% modal
+                    </span>
+                  </div>
                   <p className="text-xs mb-4" style={{ color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</p>
 
-                  <div className="grid grid-cols-2 gap-3 text-xs mb-3">
-                    <div>
-                      <div style={{ color: C.textMuted }}>Pemasukan</div>
-                      <div className="font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(income)}</div>
+                  {/* Pemasukan terpisah: Modal & Keuntungan */}
+                  <div className="mb-3 p-3 rounded-lg" style={{ background: C.surface2, border: `1px solid ${C.borderSoft}` }}>
+                    <div className="text-[11px] font-medium tracking-wide mb-2 flex items-center gap-1" style={{ color: C.textMuted }}>
+                      <ArrowUpRight size={11} color={C.jade} /> PEMASUKAN TERPISAH
                     </div>
-                    <div>
-                      <div style={{ color: C.textMuted }}>Pengeluaran</div>
-                      <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(spent)}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="flex items-center gap-1 text-[10px]" style={{ color: C.blue }}>
+                          <Coins size={10} /> Modal
+                        </div>
+                        <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(totalModal)}</div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1 text-[10px]" style={{ color: C.jade }}>
+                          <TrendingUp size={10} /> Keuntungan
+                        </div>
+                        <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(totalProfit)}</div>
+                      </div>
                     </div>
+                    {totalIncome > 0 && (
+                      <div className="mt-2 flex h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                        <div style={{ width: `${(totalModal / totalIncome) * 100}%`, background: C.blue, transition: "width .5s" }} />
+                        <div style={{ width: `${(totalProfit / totalIncome) * 100}%`, background: C.jade, transition: "width .5s" }} />
+                      </div>
+                    )}
                   </div>
 
-                  <div className="pt-3 mb-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                  <div className="text-xs mb-3">
+                    <div style={{ color: C.textMuted }}>Pengeluaran</div>
+                    <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(spent)}</div>
+                  </div>
+
+                  <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
                     <span style={{ color: C.textMuted }}>Saldo</span>
                     <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: balance >= 0 ? C.jade : C.coral }}>{fmtIDR(balance)}</span>
                   </div>
-
-                  {isAdmin && income > 0 && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setWithdrawModal(p); }}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95"
-                      style={{ background: C.goldSoft, color: C.gold, border: `1px solid ${C.gold}44` }}
-                    >
-                      <Handshake size={14} /> Tarik Dana
-                      {p.defaultWithdrawPct != null && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: C.gold, color: "#08130F" }}>
-                          {p.defaultWithdrawPct}%
-                        </span>
-                      )}
-                    </button>
-                  )}
 
                   <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}`, color: C.textMuted }}>
                     <span>PJ: {p.manager}</span>
@@ -1152,7 +1080,7 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
   );
 }
 
-function TransactionsView({ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat }) {
+function TransactionsView({ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat, getProject }) {
   const [q, setQ] = useState("");
   const [filterType, setFilterType] = useState("all");
   const rows = useMemo(() => {
@@ -1189,6 +1117,7 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
         {rows.map((t, i) => {
           const cat = getCat(t.category);
           const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
+          const split = t.type === "income" ? splitIncome(t, getProject(t.projectId)) : null;
           return (
             <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3.5 transition-colors duration-150" style={{ borderTop: i === 0 ? "none" : `1px solid ${C.borderSoft}` }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
@@ -1196,8 +1125,23 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate" style={{ color: C.text }}>{t.note}</div>
-                <div className="text-xs flex items-center gap-1.5" style={{ color: C.textMuted }}>
-                  <span style={{ color: projectColor(t.projectId) }}>●</span> {projectName(t.projectId)} · {fmtDate(t.date)} · {t.type === "expense" ? cat.label : "Pemasukan"}
+                <div className="text-xs flex items-center gap-1.5 flex-wrap" style={{ color: C.textMuted }}>
+                  <span style={{ color: projectColor(t.projectId) }}>●</span>
+                  <span>{projectName(t.projectId)}</span>
+                  <span>·</span>
+                  <span>{fmtDate(t.date)}</span>
+                  <span>·</span>
+                  <span>{t.type === "expense" ? cat.label : "Pemasukan"}</span>
+                  {split && (
+                    <>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${C.blue}22`, color: C.blue }}>
+                        M {fmtIDR(split.modal)}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: C.jadeSoft, color: C.jade }}>
+                        K {fmtIDR(split.profit)}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: t.type === "income" ? C.jade : C.text }}>
@@ -1548,6 +1492,10 @@ function PeopleView({ C, people, setPeople, projects, projectName, setPersonModa
 }
 
 function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, totals, activeProject, projectName }) {
+  const modalVsProfitData = totals.income > 0 ? [
+    { name: "Modal", value: totals.modal, color: C.blue },
+    { name: "Keuntungan", value: totals.profit, color: C.jade },
+  ] : [];
   return (
     <div className="space-y-6 lb-anim">
       <ViewHeader C={C} title="Analitik Keuangan" subtitle={activeProject === "all" ? "Wawasan menyeluruh atas kinerja keuangan kawasan" : `Wawasan keuangan untuk ${projectName(activeProject)}`} />
@@ -1570,7 +1518,7 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
         ) : (
           <Card C={C}>
             <h3 className="mb-1" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Ringkasan Projek Ini</h3>
-            <p className="text-xs mb-4" style={{ color: C.textMuted }}>Grafik perbandingan antar-projek disembunyikan karena setiap projek dipisah total. Pilih "Semua Projek" di sidebar untuk membandingkan.</p>
+            <p className="text-xs mb-4" style={{ color: C.textMuted }}>Pilih "Semua Projek" di sidebar untuk membandingkan antar projek.</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-xs mb-1" style={{ color: C.textMuted }}>Pemasukan</div>
@@ -1580,36 +1528,77 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
                 <div className="text-xs mb-1" style={{ color: C.textMuted }}>Pengeluaran</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.coral }}>{fmtIDR(totals.expense)}</div>
               </div>
+              <div>
+                <div className="text-xs mb-1 flex items-center gap-1" style={{ color: C.blue }}><Coins size={11} /> Modal</div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(totals.modal)}</div>
+              </div>
+              <div>
+                <div className="text-xs mb-1 flex items-center gap-1" style={{ color: C.jade }}><TrendingUp size={11} /> Keuntungan</div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(totals.profit)}</div>
+              </div>
             </div>
           </Card>
         )}
         <Card C={C}>
+          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Pembagian Pemasukan</h3>
+          {modalVsProfitData.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada pemasukan</div> :
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={modalVsProfitData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
+                    {modalVsProfitData.map((c, i) => <Cell key={i} fill={c.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
+                  <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="p-2.5 rounded-lg" style={{ background: `${C.blue}15` }}>
+                  <div className="text-[11px] font-medium" style={{ color: C.blue }}>Total Modal</div>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: C.text }}>{fmtIDR(totals.modal)}</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}%</div>
+                </div>
+                <div className="p-2.5 rounded-lg" style={{ background: C.jadeSoft }}>
+                  <div className="text-[11px] font-medium" style={{ color: C.jade }}>Total Keuntungan</div>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: C.text }}>{fmtIDR(totals.profit)}</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}%</div>
+                </div>
+              </div>
+            </>
+          }
+        </Card>
+      </div>
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card C={C}>
           <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Komposisi Pengeluaran</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={categoryBreakdown} dataKey="value" nameKey="label" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                {categoryBreakdown.map((c, i) => <Cell key={i} fill={c.color} />)}
-              </Pie>
+          {categoryBreakdown.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data</div> :
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={categoryBreakdown} dataKey="value" nameKey="label" innerRadius={55} outerRadius={90} paddingAngle={2}>
+                  {categoryBreakdown.map((c, i) => <Cell key={i} fill={c.color} />)}
+                </Pie>
+                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
+                <Legend wrapperStyle={{ fontSize: 11, color: C.textMuted }} />
+              </PieChart>
+            </ResponsiveContainer>
+          }
+        </Card>
+        <Card C={C}>
+          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Arus Kas Bulanan</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+              <XAxis dataKey="label" stroke={C.textMuted} fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
               <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
-              <Legend wrapperStyle={{ fontSize: 11, color: C.textMuted }} />
-            </PieChart>
+              <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
+              <Bar dataKey="Modal" stackId="a" fill={C.blue} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Keuntungan" stackId="a" fill={C.jade} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Pengeluaran" fill={C.coral} radius={[6, 6, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </Card>
       </div>
-      <Card C={C}>
-        <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Arus Kas Bulanan</h3>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={monthlyTrend}>
-            <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-            <XAxis dataKey="label" stroke={C.textMuted} fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-            <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
-            <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
-            <Bar dataKey="Pemasukan" fill={C.jade} radius={[6, 6, 0, 0]} />
-            <Bar dataKey="Pengeluaran" fill={C.coral} radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
     </div>
   );
 }
@@ -1700,41 +1689,76 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const [note, setNote] = useState("");
   const [goalId, setGoalId] = useState(goals[0]?.id || "");
   const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
+  // Split percent khusus transaksi ini (optional override terhadap project default)
+  const [customSplit, setCustomSplit] = useState(false);
+  const [splitModalPct, setSplitModalPct] = useState(String(DEFAULT_MODAL_PERCENT));
   const isEditing = !!editing;
 
   useEffect(() => {
     if (open && editing) {
       setType(editing.type); setProjectId(editing.projectId); setCategory(editing.category);
       setAmount(String(editing.amount)); setDate(editing.date); setNote(editing.note);
+      if (editing.splitModalPct != null) {
+        setCustomSplit(true);
+        setSplitModalPct(String(editing.splitModalPct));
+      } else {
+        setCustomSplit(false);
+        setSplitModalPct(String(DEFAULT_MODAL_PERCENT));
+      }
     } else if (open && !editing) {
       setType("expense"); setProjectId(projects[0]?.id || ""); setCategory(categories[0]?.id || "");
       setAmount(""); setDate(new Date().toISOString().slice(0, 10)); setNote("");
+      setCustomSplit(false);
+      setSplitModalPct(String(projects[0]?.modalPercent ?? DEFAULT_MODAL_PERCENT));
     }
   }, [open, editing, projects, categories]);
+
+  // Update split pct saat project berubah (kalau tidak di-custom)
+  useEffect(() => {
+    if (!customSplit && !isEditing) {
+      const p = projects.find((p) => p.id === projectId);
+      setSplitModalPct(String(p?.modalPercent ?? DEFAULT_MODAL_PERCENT));
+    }
+  }, [projectId, projects, customSplit, isEditing]);
 
   const selectedDebt = (debts || []).find((d) => d.id === debtId);
   const remainingDebt = selectedDebt ? Math.max(0, selectedDebt.amount - selectedDebt.paidAmount) : 0;
 
+  const amtNum = Number(String(amount).replace(/[^0-9]/g, ''));
+  const modalPctNum = Math.max(0, Math.min(100, parseFloat(String(splitModalPct).replace(",", ".")) || 0));
+  const splitModalAmt = Math.round((amtNum * modalPctNum) / 100);
+  const splitProfitAmt = amtNum - splitModalAmt;
+
   const submit = () => {
-    const rawVal = String(amount).replace(/[^0-9]/g, '');
-    const amt = Number(rawVal);
-    if (!amt || amt <= 0) return;
+    if (!amtNum || amtNum <= 0) return;
     if (isEditing) {
       if (!note || !projectId) return;
-      onEditTransaction(editing.id, { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amt, date, note });
+      const data = { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amtNum, date, note };
+      if (type === "income") {
+        data.splitModal = splitModalAmt;
+        data.splitProfit = splitProfitAmt;
+        data.splitModalPct = modalPctNum;
+      }
+      onEditTransaction(editing.id, data);
       onClose(); return;
     }
     if (type === "goal") {
       const g = goals.find((x) => x.id === goalId); if (!g) return;
-      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amt, date, note: note || `Setor ke tabungan: ${g.name}` });
-      onContributeGoal(goalId, amt);
+      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}` });
+      onContributeGoal(goalId, amtNum);
     } else if (type === "debt") {
       const d = (debts || []).find((x) => x.id === debtId); if (!d) return;
-      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amt, date, note: note || `Cicilan hutang: ${d.name}` });
-      onPayDebt(debtId, amt);
+      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amtNum, date, note: note || `Cicilan hutang: ${d.name}` });
+      onPayDebt(debtId, amtNum);
     } else {
       if (!note || !projectId) return;
-      onAddTransaction({ type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amt, date, note });
+      const tx = { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amtNum, date, note };
+      if (type === "income") {
+        tx.splitModal = splitModalAmt;
+        tx.splitProfit = splitProfitAmt;
+        tx.splitModalPct = modalPctNum;
+      }
+      onAddTransaction(tx);
     }
     onClose();
   };
@@ -1742,6 +1766,9 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const ALL_TYPES = [{ id: "expense", label: "Pengeluaran" }, { id: "income", label: "Pemasukan" }, { id: "goal", label: "Ke Tabungan" }, { id: "debt", label: "Bayar Hutang" }];
   const TYPES = isEditing ? ALL_TYPES.filter((t) => t.id === "expense" || t.id === "income") : ALL_TYPES;
   const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "debt" ? C.gold : C.coral);
+
+  const selectedProject = projects.find((p) => p.id === projectId);
+  const effectivePct = selectedProject?.modalPercent ?? DEFAULT_MODAL_PERCENT;
 
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Transaksi" : "Tambah Transaksi"} C={C}>
@@ -1789,6 +1816,56 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
         </Field>
       )}
       <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+
+      {/* Preview split pemasukan */}
+      {type === "income" && amtNum > 0 && (
+        <div className="mb-4 p-3 rounded-lg" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium flex items-center gap-1" style={{ color: C.textMuted }}>
+              <Split size={12} /> Pemasukan akan dibagi otomatis
+            </span>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={customSplit}
+                onChange={(e) => setCustomSplit(e.target.checked)}
+                style={{ accentColor: C.jade }}
+              />
+              <span className="text-[11px]" style={{ color: C.textMuted }}>Override</span>
+            </label>
+          </div>
+          {customSplit && (
+            <div className="mb-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={splitModalPct}
+                  onChange={(e) => setSplitModalPct(e.target.value)}
+                  style={{ ...inputStyle(C), padding: "6px 10px", fontSize: 13, width: 80 }}
+                />
+                <span className="text-xs" style={{ color: C.textMuted }}>% untuk Modal</span>
+              </div>
+            </div>
+          )}
+          {!customSplit && (
+            <div className="text-[11px] mb-2" style={{ color: C.textMuted }}>
+              Menggunakan setting projek: <strong style={{ color: C.text }}>{effectivePct}%</strong> modal
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="p-2 rounded-md" style={{ background: `${C.blue}15` }}>
+              <div className="text-[10px] flex items-center gap-1" style={{ color: C.blue }}><Coins size={10} /> Modal ({modalPctNum}%)</div>
+              <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(splitModalAmt)}</div>
+            </div>
+            <div className="p-2 rounded-md" style={{ background: C.jadeSoft }}>
+              <div className="text-[10px] flex items-center gap-1" style={{ color: C.jade }}><TrendingUp size={10} /> Keuntungan ({(100 - modalPctNum).toFixed(0)}%)</div>
+              <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(splitProfitAmt)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Field label="Tanggal" C={C}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} /></Field>
       {(type === "expense" || type === "income") && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
       {(type === "goal" || type === "debt") && !isEditing && <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} /></Field>}
@@ -1859,16 +1936,28 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
   const [budget, setBudget] = useState("");
   const [manager, setManager] = useState("");
   const [desc, setDesc] = useState("");
+  const [modalPercent, setModalPercent] = useState(String(DEFAULT_MODAL_PERCENT));
   const isEditing = !!editing;
   useEffect(() => {
-    if (open && editing) { setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || ""); }
-    else if (open && !editing) { setName(""); setLocation(""); setBudget(""); setManager(""); setDesc(""); }
+    if (open && editing) {
+      setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget));
+      setManager(editing.manager || ""); setDesc(editing.desc || "");
+      setModalPercent(String(editing.modalPercent ?? DEFAULT_MODAL_PERCENT));
+    } else if (open && !editing) {
+      setName(""); setLocation(""); setBudget(""); setManager(""); setDesc("");
+      setModalPercent(String(DEFAULT_MODAL_PERCENT));
+    }
   }, [open, editing]);
   const submit = () => {
     const b = Number(String(budget).replace(/[^0-9]/g, ''));
     if (!name || !location || !b) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc }); onClose();
+    const pctNum = parseFloat(String(modalPercent).replace(",", "."));
+    const pct = isNaN(pctNum) ? DEFAULT_MODAL_PERCENT : Math.max(0, Math.min(100, pctNum));
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc, modalPercent: pct });
+    onClose();
   };
+  const mp = parseFloat(String(modalPercent).replace(",", ".")) || 0;
+  const validPct = !isNaN(mp) && mp >= 0 && mp <= 100;
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Projek" : "Projek Baru"} C={C}>
       <Field label="Nama Projek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
@@ -1876,6 +1965,37 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
       <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ projek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat projek" style={inputStyle(C)} /></Field>
+
+      <div className="p-3 rounded-lg mb-3" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center gap-1.5 mb-2">
+          <Split size={13} color={C.jade} />
+          <span className="text-xs font-semibold" style={{ color: C.text }}>Pembagian Pemasukan Otomatis</span>
+        </div>
+        <div className="text-[11px] mb-2" style={{ color: C.textMuted, lineHeight: 1.5 }}>
+          Setiap pemasukan yang masuk ke projek ini akan otomatis dibagi menjadi <strong style={{ color: C.blue }}>Modal</strong> dan <strong style={{ color: C.jade }}>Keuntungan</strong>.
+        </div>
+        <Field label="Persentase untuk Modal" C={C}>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={modalPercent}
+              onChange={(e) => setModalPercent(e.target.value)}
+              style={{ ...inputStyle(C), width: 90 }}
+            />
+            <span className="text-sm" style={{ color: C.textMuted }}>% Modal</span>
+            <span className="text-sm" style={{ color: C.textMuted }}>·</span>
+            <span className="text-sm" style={{ color: C.textMuted }}>{validPct ? (100 - mp).toFixed(0) : 0}% Keuntungan</span>
+          </div>
+        </Field>
+        {validPct && (
+          <div className="flex h-2 rounded-full overflow-hidden" style={{ background: C.border }}>
+            <div style={{ width: `${mp}%`, background: C.blue, transition: "width .3s" }} />
+            <div style={{ width: `${100 - mp}%`, background: C.jade, transition: "width .3s" }} />
+          </div>
+        )}
+      </div>
+
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Projek"}</button>
     </Modal>
   );
