@@ -8,7 +8,7 @@ import {
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
   CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete, Cake
+  Calculator, Delete, Cake, Handshake, Banknote
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -53,6 +53,7 @@ const DEFAULT_CATEGORIES = [
   { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3", default: true },
   { id: "sewa-rumah", label: "Sewa Rumah", icon: Home, color: "#F0725A", default: true },
   { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3", default: true },
+  { id: "penarikan-pemasukan", label: "Penarikan Pemasukan", icon: Handshake, color: "#E0B15C", default: true },
 ];
 
 const isValidIcon = (icon) =>
@@ -60,7 +61,10 @@ const isValidIcon = (icon) =>
 
 const hydrateCategories = (loaded) => {
   if (!Array.isArray(loaded) || loaded.length === 0) return DEFAULT_CATEGORIES;
-  return loaded.map((c) => {
+  // pastikan kategori default "penarikan-pemasukan" selalu ada
+  const hasWithdraw = loaded.some((c) => c.id === "penarikan-pemasukan");
+  const merged = hasWithdraw ? loaded : [...loaded, DEFAULT_CATEGORIES.find((d) => d.id === "penarikan-pemasukan")];
+  return merged.map((c) => {
     const def = DEFAULT_CATEGORIES.find((d) => d.id === c.id);
     if (def) return { ...c, icon: def.icon };
     return { ...c, icon: isValidIcon(c.icon) ? c.icon : Tag };
@@ -405,6 +409,7 @@ export default function App() {
   const [personModal, setPersonModal] = useState(null);
   const [projModal, setProjModal] = useState(null);
   const [catModal, setCatModal] = useState(false);
+  const [withdrawModal, setWithdrawModal] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
@@ -555,7 +560,7 @@ export default function App() {
         </div>
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
-          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />}
+          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, setWithdrawModal }} />}
           {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
         </main>
@@ -577,6 +582,23 @@ export default function App() {
       <AddDebtModal open={!!debtModal} editing={debtModal && debtModal !== "new" ? debtModal : null} onClose={() => setDebtModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setDebts((prev) => prev.map((d) => (d.id === data.id ? { ...d, ...data } : d))); else setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...data }, ...prev]); }} />
       <AddPersonModal open={!!personModal} editing={personModal && personModal !== "new" ? personModal : null} onClose={() => setPersonModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setPeople((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setPeople((prev) => [{ id: uid("ah"), ...data }, ...prev]); }} />
       <AddProjectModal open={!!projModal} editing={projModal && projModal !== "new" ? projModal : null} onClose={() => setProjModal(null)} C={C} onSave={(data) => { if (data.id) setProjects((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...data }]); }} />
+      <WithdrawFundsModal
+        open={!!withdrawModal}
+        project={withdrawModal}
+        transactions={transactions}
+        categories={categories}
+        C={C}
+        onClose={() => setWithdrawModal(null)}
+        onConfirm={(txs, updatedProject) => {
+          if (txs.length > 0) {
+            setTransactions((prev) => [...txs, ...prev]);
+          }
+          if (updatedProject) {
+            setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
+          }
+          setWithdrawModal(null);
+        }}
+      />
     </div>
   );
 }
@@ -884,11 +906,181 @@ function KeuanganView(props) {
   );
 }
 
-function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }) {
-  // Hitung total pendapatan dan modal semua projek untuk persentase
-  const totalIncomeAll = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalBudgetAll = projects.reduce((s, p) => s + p.budget, 0);
+// Modal untuk menarik sebagian pemasukan projek sebagai pengeluaran otomatis.
+// Admin input persentase (0-100), sistem hitung nominalnya dari total pemasukan projek,
+// lalu membuat transaksi pengeluaran dengan kategori "Penarikan Pemasukan".
+function WithdrawFundsModal({ open, project, transactions, categories, C, onClose, onConfirm }) {
+  const [percent, setPercent] = useState("");
+  const [note, setNote] = useState("");
+  const [rememberPercent, setRememberPercent] = useState(true);
 
+  // Reset state setiap modal dibuka untuk projek baru
+  useEffect(() => {
+    if (open && project) {
+      // Pakai persentase default yang tersimpan (kalau ada), kalau tidak kosongkan
+      setPercent(project.defaultWithdrawPct != null ? String(project.defaultWithdrawPct) : "");
+      setNote("");
+      setRememberPercent(true);
+    }
+  }, [open, project]);
+
+  if (!project) return null;
+
+  // Hitung total pemasukan projek ini
+  const projectIncome = transactions
+    .filter((t) => t.projectId === project.id && t.type === "income")
+    .reduce((s, t) => s + t.amount, 0);
+
+  const projectExpense = transactions
+    .filter((t) => t.projectId === project.id && t.type === "expense")
+    .reduce((s, t) => s + t.amount, 0);
+
+  const projectBalance = projectIncome - projectExpense;
+
+  // Pastikan kategori "penarikan-pemasukan" ada (fallback ke kategori pertama)
+  const withdrawCat = categories.find((c) => c.id === "penarikan-pemasukan") || categories[0];
+
+  const pctNum = parseFloat(String(percent).replace(",", "."));
+  const isValidPct = !isNaN(pctNum) && pctNum >= 0 && pctNum <= 100;
+  const withdrawAmount = isValidPct ? Math.round((projectIncome * pctNum) / 100) : 0;
+  const canWithdraw = withdrawAmount > 0 && withdrawAmount <= projectBalance;
+
+  const submit = () => {
+    if (!canWithdraw) return;
+
+    const tx = {
+      type: "expense",
+      projectId: project.id,
+      category: withdrawCat.id,
+      amount: withdrawAmount,
+      date: new Date().toISOString().slice(0, 10),
+      note: note?.trim() || `Penarikan ${pctNum}% dari pemasukan projek ${project.name}`,
+    };
+
+    const updatedProject = rememberPercent && isValidPct
+      ? { ...project, defaultWithdrawPct: pctNum }
+      : project;
+
+    onConfirm([tx], updatedProject);
+  };
+
+  const quickPercents = [5, 10, 15, 20, 25, 50];
+
+  return (
+    <Modal open={open} onClose={onClose} title="Tarik Dana dari Pemasukan" C={C}>
+      <div className="mb-4 px-3 py-3 rounded-lg" style={{ background: `linear-gradient(135deg, ${project.color}22, ${project.color}08)`, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: project.color }}>
+            <Building2 size={15} color="#08130F" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold truncate" style={{ fontFamily: "Fraunces, serif", fontSize: 15, color: C.text }}>{project.name}</div>
+            <div className="text-xs flex items-center gap-1" style={{ color: C.textMuted }}><MapPin size={10} />{project.location}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <div style={{ color: C.textMuted }}>Pemasukan</div>
+            <div className="font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(projectIncome)}</div>
+          </div>
+          <div>
+            <div style={{ color: C.textMuted }}>Pengeluaran</div>
+            <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(projectExpense)}</div>
+          </div>
+          <div>
+            <div style={{ color: C.textMuted }}>Saldo</div>
+            <div className="font-semibold" style={{ color: projectBalance >= 0 ? C.jade : C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(projectBalance)}</div>
+          </div>
+        </div>
+      </div>
+
+      {projectIncome === 0 && (
+        <div className="mb-4 px-3 py-2.5 rounded-lg text-xs" style={{ background: C.coralSoft, color: C.coral }}>
+          Projek ini belum memiliki pemasukan. Tambahkan transaksi pemasukan terlebih dahulu.
+        </div>
+      )}
+
+      <Field label="Persentase yang ditarik" C={C}>
+        <div className="relative">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={percent}
+            onChange={(e) => setPercent(e.target.value)}
+            placeholder="Contoh: 10"
+            style={{ ...inputStyle(C), paddingRight: 32 }}
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: C.textMuted }}>%</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {quickPercents.map((q) => (
+            <button
+              key={q}
+              onClick={() => setPercent(String(q))}
+              className="px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 hover:scale-105"
+              style={{ background: pctNum === q ? C.jadeSoft : C.surface2, color: pctNum === q ? C.jade : C.textMuted, border: `1px solid ${C.border}` }}
+            >
+              {q}%
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      {isValidPct && (
+        <div className="mb-4 px-3 py-3 rounded-lg" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span style={{ color: C.textMuted }}>Nominal yang akan ditarik:</span>
+            <Banknote size={14} color={C.gold} />
+          </div>
+          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: C.gold }}>
+            {fmtIDR(withdrawAmount)}
+          </div>
+          <div className="text-xs mt-1.5" style={{ color: C.textMuted }}>
+            = {pctNum}% × {fmtIDR(projectIncome)}
+          </div>
+          {withdrawAmount > projectBalance && (
+            <div className="text-xs mt-2 px-2 py-1.5 rounded" style={{ background: C.coralSoft, color: C.coral }}>
+              ⚠️ Melebihi saldo projek ({fmtIDR(projectBalance)})
+            </div>
+          )}
+        </div>
+      )}
+
+      <Field label="Catatan penarikan (opsional)" C={C}>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={`Otomatis: Penarikan ${percent || "X"}% dari pemasukan ${project.name}`}
+          style={inputStyle(C)}
+        />
+      </Field>
+
+      <label className="flex items-start gap-2 mb-4 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={rememberPercent}
+          onChange={(e) => setRememberPercent(e.target.checked)}
+          className="mt-0.5"
+          style={{ accentColor: C.jade }}
+        />
+        <span className="text-xs" style={{ color: C.textMuted, lineHeight: 1.5 }}>
+          Ingat persentase <strong style={{ color: C.text }}>{percent || "0"}%</strong> sebagai default untuk projek ini di waktu mendatang.
+        </span>
+      </label>
+
+      <button
+        onClick={submit}
+        disabled={!canWithdraw}
+        className="w-full py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2"
+        style={{ background: canWithdraw ? C.gold : C.surface2, color: canWithdraw ? "#08130F" : C.textMuted }}
+      >
+        <Handshake size={15} /> Tarik {fmtIDR(withdrawAmount)}
+      </button>
+    </Modal>
+  );
+}
+
+function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, setWithdrawModal }) {
   return (
     <div className="space-y-6 lb-anim">
       <ViewHeader C={C} title="Profil Projek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Projek", onClick: () => setProjModal("new") } : null} />
@@ -898,17 +1090,14 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
           const tx = transactions.filter((t) => t.projectId === p.id);
           const spent = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
           const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-          
-          // Hitung persentase
-          const incomePct = totalIncomeAll > 0 ? (income / totalIncomeAll) * 100 : 0;
-          const budgetPct = totalBudgetAll > 0 ? (p.budget / totalBudgetAll) * 100 : 0;
+          const balance = income - spent;
 
           return (
-            <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group cursor-pointer transition-transform duration-200 hover:-translate-y-1" style={{ position: "relative" }}>
+            <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group transition-transform duration-200 hover:-translate-y-1" style={{ position: "relative" }}>
               {isAdmin && (
                 <button onClick={(e) => { e.stopPropagation(); setProjModal(p); }} className="absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-transform duration-150 hover:scale-110" style={{ background: "rgba(0,0,0,0.35)", color: "#fff" }} title="Edit projek"><Pencil size={13} /></button>
               )}
-              <div onClick={() => { setActiveProject(p.id); setTab("dashboard"); }}>
+              <div onClick={() => { setActiveProject(p.id); setTab("dashboard"); }} className="cursor-pointer">
                 <div className="relative h-20 flex items-end p-4" style={{ background: `linear-gradient(135deg, ${p.color}30, ${p.color}08)` }}>
                   <ContourLines color={p.color} opacity={0.3} />
                   <div className="relative w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: p.color }}><Building2 size={18} color="#08130F" /></div>
@@ -917,24 +1106,6 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: C.text }}>{p.name}</div>
                   <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textMuted }}><MapPin size={11} />{p.location}</div>
                   <p className="text-xs mb-4" style={{ color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</p>
-                  
-                  {/* Persentase Pendapatan */}
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span style={{ color: C.textMuted }}>Pendapatan</span>
-                      <span style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>{incomePct.toFixed(1)}%</span>
-                    </div>
-                    <ProgressBar pct={incomePct} color={C.jade} C={C} height={6} />
-                  </div>
-
-                  {/* Persentase Modal */}
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span style={{ color: C.textMuted }}>Modal</span>
-                      <span style={{ color: C.gold, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>{budgetPct.toFixed(1)}%</span>
-                    </div>
-                    <ProgressBar pct={budgetPct} color={C.gold} C={C} height={6} />
-                  </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs mb-3">
                     <div>
@@ -946,6 +1117,27 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                       <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(spent)}</div>
                     </div>
                   </div>
+
+                  <div className="pt-3 mb-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                    <span style={{ color: C.textMuted }}>Saldo</span>
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: balance >= 0 ? C.jade : C.coral }}>{fmtIDR(balance)}</span>
+                  </div>
+
+                  {isAdmin && income > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setWithdrawModal(p); }}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95"
+                      style={{ background: C.goldSoft, color: C.gold, border: `1px solid ${C.gold}44` }}
+                    >
+                      <Handshake size={14} /> Tarik Dana
+                      {p.defaultWithdrawPct != null && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: C.gold, color: "#08130F" }}>
+                          {p.defaultWithdrawPct}%
+                        </span>
+                      )}
+                    </button>
+                  )}
+
                   <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}`, color: C.textMuted }}>
                     <span>PJ: {p.manager}</span>
                     <span>{fmtIDR(p.budget)}/bln</span>
