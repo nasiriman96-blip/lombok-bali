@@ -147,7 +147,7 @@ function Modal({ open, onClose, title, children, C }) {
   // layar (viewport penuh), tidak terjebak/terpotong oleh kontainer induk mana pun.
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.55)", animation: "lbFadeIn .18s ease" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[88vh] overflow-y-auto" style={{ background: C.surface, border: `1px solid ${C.border}`, animation: "lbSlideUp .22s cubic-bezier(.2,.8,.2,1)" }}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[88vh] overflow-y-auto" style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, animation: "lbSlideUp .22s cubic-bezier(.2,.8,.2,1)" }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold" style={{ color: C.text, fontFamily: "Fraunces, serif" }}>{title}</h3>
           <button onClick={onClose} style={{ color: C.textMuted }}><X size={20} /></button>
@@ -222,7 +222,7 @@ function CalculatorPopover({ C, initial, onApply, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xs rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xs rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text }}>
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold" style={{ fontFamily: "Fraunces, serif" }}>Kalkulator</span>
           <button onClick={onClose} style={{ color: C.textMuted }}><X size={18} /></button>
@@ -332,7 +332,7 @@ function QuickPaymentModal({ open, onClose, C, title, itemName, remaining, confi
         onClick={submit}
         disabled={!Number(amount)}
         className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95"
-        style={{ background: Number(amount) ? C.jade : C.surface2, color: Number(amount) ? "#08130F" : C.textFaint }}
+        style={{ background: Number(amount) ? C.jade : C.surface2, color: Number(amount) ? "#08130F" : C.textMuted, border: `1px solid ${C.border}` }}
       >
         {confirmLabel}
       </button>
@@ -807,7 +807,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
               <XAxis dataKey="label" stroke={C.textFaint} fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke={C.textFaint} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-              <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
+              <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} formatter={(v) => fmtIDR(v)} />
               <Line type="monotone" dataKey="Pemasukan" stroke={C.jade} strokeWidth={2.5} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="Pengeluaran" stroke={C.coral} strokeWidth={2.5} dot={{ r: 3 }} />
             </LineChart>
@@ -823,7 +823,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
                   <Pie data={categoryBreakdown} dataKey="value" nameKey="label" innerRadius={45} outerRadius={68} paddingAngle={3}>
                     {categoryBreakdown.map((c, i) => <Cell key={i} fill={c.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
+                  <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} formatter={(v) => fmtIDR(v)} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -973,6 +973,12 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                       <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(spent)}</div>
                     </div>
                   </div>
+                  {(p.modalPercent || 0) > 0 && (
+                    <div className="mb-3 px-3 py-2 rounded-lg flex items-center justify-between" style={{ background: C.goldSoft }}>
+                      <span className="text-xs" style={{ color: C.gold }}>Modal ({p.modalPercent}% dari Pendapatan)</span>
+                      <span className="text-sm font-semibold" style={{ color: C.gold, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(income * (p.modalPercent / 100))}</span>
+                    </div>
+                  )}
                   <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}`, color: C.textFaint }}>
                     <span>PJ: {p.manager}</span>
                     <span>{fmtIDR(p.budget)}/bln</span>
@@ -1408,8 +1414,8 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
                 <XAxis dataKey="name" stroke={C.textFaint} fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke={C.textFaint} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} formatter={(v) => fmtIDR(v)} />
+                <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
                 <Bar dataKey="Anggaran" fill={C.blue} radius={[6, 6, 0, 0]} />
                 <Bar dataKey="Terpakai" fill={C.gold} radius={[6, 6, 0, 0]} />
               </BarChart>
@@ -1438,8 +1444,8 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
               <Pie data={categoryBreakdown} dataKey="value" nameKey="label" innerRadius={55} outerRadius={90} paddingAngle={2}>
                 {categoryBreakdown.map((c, i) => <Cell key={i} fill={c.color} />)}
               </Pie>
-              <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} formatter={(v) => fmtIDR(v)} />
+              <Legend wrapperStyle={{ fontSize: 11, color: C.textMuted }} />
             </PieChart>
           </ResponsiveContainer>
         </Card>
@@ -1451,8 +1457,8 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
             <XAxis dataKey="label" stroke={C.textFaint} fontSize={12} tickLine={false} axisLine={false} />
             <YAxis stroke={C.textFaint} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-            <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12 }} formatter={(v) => fmtIDR(v)} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} formatter={(v) => fmtIDR(v)} />
+            <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
             <Bar dataKey="Pemasukan" fill={C.jade} radius={[6, 6, 0, 0]} />
             <Bar dataKey="Pengeluaran" fill={C.coral} radius={[6, 6, 0, 0]} />
           </BarChart>
@@ -1718,19 +1724,23 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [budget, setBudget] = useState("");
+  const [modalPercent, setModalPercent] = useState("0");
   const [manager, setManager] = useState("");
   const [desc, setDesc] = useState("");
   const isEditing = !!editing;
 
   useEffect(() => {
-    if (open && editing) { setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || ""); } 
-    else if (open && !editing) { setName(""); setLocation(""); setBudget(""); setManager(""); setDesc(""); }
+    if (open && editing) { setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget)); setModalPercent(String(editing.modalPercent ?? 0)); setManager(editing.manager || ""); setDesc(editing.desc || ""); } 
+    else if (open && !editing) { setName(""); setLocation(""); setBudget(""); setModalPercent("0"); setManager(""); setDesc(""); }
   }, [open, editing]);
 
   const submit = () => {
     const b = Number(String(budget).replace(/[^0-9]/g, ''));
+    let mp = Number(modalPercent);
+    if (isNaN(mp)) mp = 0;
+    mp = Math.max(0, Math.min(100, mp));
     if (!name || !location || !b) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc }); onClose();
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, modalPercent: mp, manager, desc }); onClose();
   };
 
   return (
@@ -1738,6 +1748,9 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
       <Field label="Nama Projek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
       <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
+      <Field label="Persentase Modal dari Pendapatan (%)" C={C}>
+        <input type="number" min="0" max="100" value={modalPercent} onChange={(e) => setModalPercent(e.target.value)} placeholder="0" style={inputStyle(C)} />
+      </Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ projek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat projek" style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Projek"}</button>
