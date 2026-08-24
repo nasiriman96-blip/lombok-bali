@@ -481,7 +481,7 @@ export default function App() {
 
   const upcomingBills = useMemo(() => bills.filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate)), [bills, activeProject]);
 
-  const projectName = (id) => projects.find((p) => p.id === id)?.name || "Kawasan (Semua Proyek)";
+  const projectName = (id) => projects.find((p) => p.id === id)?.name || "Kawasan (Semua Projek)";
   const projectColor = (id) => projects.find((p) => p.id === id)?.color || C.jade;
   const isAdmin = user?.role === "admin";
 
@@ -493,7 +493,6 @@ export default function App() {
     { id: "projects", label: "PROJEK", icon: Building2 },
     { id: "keuangan", label: "Keuangan", icon: Wallet },
     { id: "people", label: "Ahli", icon: Users2 },
-    { id: "analytics", label: "Analitik", icon: BarChart3 },
   ];
 
   return (
@@ -549,9 +548,8 @@ export default function App() {
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, totalModal, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />}
-          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal }} />}
+          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
-          {tab === "analytics" && <AnalyticsView {...{ C, categoryBreakdown, monthlyTrend, projectComparison, totals, activeProject, projectName }} />}
         </main>
       </div>
 
@@ -600,10 +598,10 @@ function ProjectSwitcher({ projects, activeProject, setActiveProject, C }) {
     <div className="mt-6">
       <div className="text-xs font-medium mb-2 px-1" style={{ color: C.textFaint }}>KAWASAN</div>
       <button onClick={() => setActiveProject("all")} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg mb-1 text-sm transition-all duration-150" style={{ background: activeProject === "all" ? C.jadeSoft : "transparent", color: activeProject === "all" ? C.jade : C.textMuted, fontWeight: activeProject === "all" ? 600 : 500 }}>
-        <Sparkles size={15} /> Semua Proyek
+        <Sparkles size={15} /> Semua Projek
       </button>
       <div className="max-h-40 overflow-y-auto space-y-1">
-        {projects.length === 0 && <div className="px-3 text-xs" style={{color: C.textFaint}}>Belum ada proyek</div>}
+        {projects.length === 0 && <div className="px-3 text-xs" style={{color: C.textFaint}}>Belum ada projek</div>}
         {projects.map((p) => (
           <button key={p.id} onClick={() => setActiveProject(p.id)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150" style={{ background: activeProject === p.id ? C.surface2 : "transparent", color: activeProject === p.id ? C.text : C.textMuted, fontWeight: activeProject === p.id ? 600 : 500 }}>
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
@@ -712,7 +710,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, total
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card C={C} className="lb-anim">
-          <div className="flex items-center justify-between mb-2"><span style={{ color: C.textMuted, fontSize: 13 }}>Proyek Aktif</span><Building2 size={16} color={C.jade} /></div>
+          <div className="flex items-center justify-between mb-2"><span style={{ color: C.textMuted, fontSize: 13 }}>Projek Aktif</span><Building2 size={16} color={C.jade} /></div>
           <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "Fraunces, serif" }}>{projects.length}</div>
         </Card>
         <Card C={C} className="lb-anim">
@@ -843,6 +841,7 @@ function KeuanganView(props) {
     { id: "savings", label: "Tabungan", icon: PiggyBank },
     { id: "bills", label: "Tagihan", icon: Bell },
     { id: "debts", label: "Hutang", icon: HandCoins },
+    { id: "analytics", label: "Analitik", icon: BarChart3 },
   ];
 
   return (
@@ -869,6 +868,7 @@ function KeuanganView(props) {
       {subTab === "savings" && <SavingsView {...props} />}
       {subTab === "bills" && <BillsView {...props} />}
       {subTab === "debts" && <DebtsView {...props} />}
+      {subTab === "analytics" && <AnalyticsView {...props} />}
     </div>
   );
 }
@@ -876,8 +876,8 @@ function KeuanganView(props) {
 function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }) {
   return (
     <div className="space-y-6 lb-anim">
-      <ViewHeader C={C} title="Profil Proyek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Proyek", onClick: () => setProjModal("new") } : null} />
-      {projects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data proyek. Klik tombol tambah proyek untuk mulai.</div>}
+      <ViewHeader C={C} title="Profil Projek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Projek", onClick: () => setProjModal("new") } : null} />
+      {projects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data projek. Klik tombol tambah projek untuk mulai.</div>}
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {projects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id);
@@ -886,7 +886,7 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
           return (
             <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group cursor-pointer transition-transform duration-200 hover:-translate-y-1" style={{ position: "relative" }}>
               {isAdmin && (
-                <button onClick={(e) => { e.stopPropagation(); setProjModal(p); }} className="absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-transform duration-150 hover:scale-110" style={{ background: "rgba(0,0,0,0.35)", color: "#fff" }} title="Edit proyek"><Pencil size={13} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setProjModal(p); }} className="absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-transform duration-150 hover:scale-110" style={{ background: "rgba(0,0,0,0.35)", color: "#fff" }} title="Edit projek"><Pencil size={13} /></button>
               )}
               <div onClick={() => { setActiveProject(p.id); setTab("dashboard"); }}>
                 <div className="relative h-20 flex items-end p-4" style={{ background: `linear-gradient(135deg, ${p.color}30, ${p.color}08)` }}>
@@ -998,7 +998,7 @@ function BudgetView({ C, projects, transactions, thisMonthKey, categories, activ
   return (
     <div className="space-y-5 lb-anim">
       <ViewHeader C={C} title="Anggaran Bulanan" subtitle={`Realisasi vs anggaran untuk ${monthLabel(thisMonthKey)}`} />
-      {shownProjects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data proyek.</div>}
+      {shownProjects.length === 0 && <div className="text-sm" style={{color: C.textFaint}}>Belum ada data projek.</div>}
       <div className="grid lg:grid-cols-2 gap-5">
         {shownProjects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id && t.type === "expense" && monthKey(t.date) === thisMonthKey);
@@ -1071,6 +1071,7 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {isAdmin && <button onClick={() => setGoalModal(g)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
+                  {isAdmin && <button onClick={() => { if (confirm(`Hapus target "${g.name}"?`)) setGoals((prev) => prev.filter((x) => x.id !== g.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>}
                   <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}><PiggyBank size={17} color={C.jade} /></div>
                 </div>
               </div>
@@ -1277,7 +1278,7 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
       <div className="grid lg:grid-cols-2 gap-6">
         {activeProject === "all" ? (
           <Card C={C}>
-            <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Anggaran vs Realisasi per Proyek</h3>
+            <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Anggaran vs Realisasi per Projek</h3>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={projectComparison}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
@@ -1292,8 +1293,8 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
           </Card>
         ) : (
           <Card C={C}>
-            <h3 className="mb-1" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Ringkasan Proyek Ini</h3>
-            <p className="text-xs mb-4" style={{ color: C.textFaint }}>Grafik perbandingan antar-proyek disembunyikan karena setiap proyek dipisah total. Pilih "Semua Proyek" di sidebar untuk membandingkan.</p>
+            <h3 className="mb-1" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Ringkasan Projek Ini</h3>
+            <p className="text-xs mb-4" style={{ color: C.textFaint }}>Grafik perbandingan antar-projek disembunyikan karena setiap projek dipisah total. Pilih "Semua Projek" di sidebar untuk membandingkan.</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-xs mb-1" style={{ color: C.textFaint }}>Pemasukan</div>
@@ -1481,9 +1482,9 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       </div>
       {(type === "expense" || type === "income") && (
         <>
-          <Field label="Proyek" C={C}>
+          <Field label="Projek" C={C}>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
-              {projects.length === 0 && <option value="">(Buat proyek dulu)</option>}
+              {projects.length === 0 && <option value="">(Buat projek dulu)</option>}
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
@@ -1548,7 +1549,7 @@ function AddGoalModal({ open, onClose, C, projects, editing, onSave }) {
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Target Tabungan" : "Target Tabungan Baru"} C={C}>
       <Field label="Nama Target" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Dana Renovasi" style={inputStyle(C)} /></Field>
-      <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}><option value="all">Seluruh Kawasan</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+      <Field label="Projek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}><option value="all">Seluruh Kawasan</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       <Field label="Target Dana (Rp)" C={C}><AmountInput value={target} onChange={setTarget} C={C} /></Field>
       <Field label="Tenggat" C={C}><input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={inputStyle(C)} /></Field>
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Buat Target"}</button>
@@ -1579,7 +1580,7 @@ function AddBillModal({ open, onClose, C, projects, categories, editing, onSave 
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Tagihan" : "Tagihan Baru"} C={C}>
       <Field label="Nama Tagihan" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Listrik PLN" style={inputStyle(C)} /></Field>
-      <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+      <Field label="Projek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
       <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
       <Field label="Jatuh Tempo" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
@@ -1611,14 +1612,14 @@ function AddProjectModal({ open, onClose, C, editing, onSave }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Proyek" : "Proyek Baru"} C={C}>
-      <Field label="Nama Proyek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Projek" : "Projek Baru"} C={C}>
+      <Field label="Nama Projek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
       <Field label="Modal Awal (Rp)" C={C}><AmountInput value={modal} onChange={setModal} C={C} /></Field>
       <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
-      <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ proyek" style={inputStyle(C)} /></Field>
-      <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat proyek" style={inputStyle(C)} /></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Proyek"}</button>
+      <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ projek" style={inputStyle(C)} /></Field>
+      <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat projek" style={inputStyle(C)} /></Field>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Projek"}</button>
     </Modal>
   );
 }
@@ -1647,7 +1648,7 @@ function AddDebtModal({ open, onClose, C, projects, editing, onSave }) {
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Hutang" : "Hutang Baru"} C={C}>
       <Field label="Nama Hutang / Kreditur" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Pinjaman Bank Modal Kerja" style={inputStyle(C)} /></Field>
-      <Field label="Proyek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+      <Field label="Projek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       <Field label="Total Hutang (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
       <Field label="Sudah Dibayar (Rp)" C={C}><AmountInput value={paidAmount} onChange={setPaidAmount} C={C} /></Field>
       <Field label="Jatuh Tempo / Target Lunas" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
@@ -1685,7 +1686,7 @@ function AddPersonModal({ open, onClose, C, projects, editing, onSave }) {
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Data Ahli" : "Tambah Data Ahli"} C={C}>
       <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{PEOPLE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
-      <Field label="Proyek / Kawasan" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+      <Field label="Projek / Kawasan" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length===0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       <Field label="Nama Lengkap" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama lengkap" style={inputStyle(C)} /></Field>
       <Field label="Nama Ayah" C={C}><input value={fatherName} onChange={(e) => setFatherName(e.target.value)} placeholder="Nama ayah" style={inputStyle(C)} /></Field>
       <Field label="Nama Ibu" C={C}><input value={motherName} onChange={(e) => setMotherName(e.target.value)} placeholder="Nama ibu" style={inputStyle(C)} /></Field>
