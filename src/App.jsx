@@ -298,6 +298,43 @@ const ACCOUNTS = [
   { username: "Nasir", password: "313500", role: "staff", displayName: "Nasir" },
 ];
 
+// Modal ringkas untuk aksi cepat "bayar/cicil/setor" — menggantikan window.prompt() bawaan
+// browser yang tampilannya polos, dengan input nominal + kalkulator yang senada dengan app.
+function QuickPaymentModal({ open, onClose, C, title, itemName, remaining, confirmLabel = "Simpan", onConfirm }) {
+  const [amount, setAmount] = useState("");
+
+  useEffect(() => { if (open) setAmount(""); }, [open]);
+
+  const submit = () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return;
+    onConfirm(amt);
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} C={C}>
+      {itemName && (
+        <div className="mb-4 px-3 py-2.5 rounded-lg" style={{ background: C.surface2 }}>
+          <div className="text-sm font-medium">{itemName}</div>
+          {remaining != null && <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>Sisa: {fmtIDR(remaining)}</div>}
+        </div>
+      )}
+      <Field label="Jumlah (Rp)" C={C}>
+        <AmountInput value={amount} onChange={setAmount} C={C} />
+      </Field>
+      <button
+        onClick={submit}
+        disabled={!Number(amount)}
+        className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95"
+        style={{ background: Number(amount) ? C.jade : C.surface2, color: Number(amount) ? "#08130F" : C.textFaint }}
+      >
+        {confirmLabel}
+      </button>
+    </Modal>
+  );
+}
+
 function LoginScreen({ C, onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -1067,18 +1104,18 @@ function BudgetView({ C, projects, transactions, thisMonthKey, categories, activ
 
 function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject, setTransactions }) {
   const shownGoals = activeProject === "all" ? goals : goals.filter((g) => g.projectId === activeProject || g.projectId === "all");
-  const addFunds = (id) => {
-    const goal = goals.find((g) => g.id === id);
-    const amtStr = prompt("Tambah dana tabungan (Rp):");
-    if (!amtStr) return;
-    const n = Number(amtStr.replace(/[^0-9]/g, ""));
-    if (!n || n <= 0) return;
-    setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, current: g.current + n } : g)));
+  const [payGoal, setPayGoal] = useState(null);
+
+  const confirmAddFunds = (n) => {
+    const goal = payGoal;
+    if (!goal) return;
+    setGoals((prev) => prev.map((g) => (g.id === goal.id ? { ...g, current: g.current + n } : g)));
     const projId = goal.projectId === "all" ? (projects[0]?.id || "") : goal.projectId;
     if (projId) {
       setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: projId, category: "tabungan", amount: n, date: new Date().toISOString().slice(0, 10), note: `Setor ke tabungan: ${goal.name}` }, ...prev]);
     }
   };
+
   return (
     <div className="space-y-5 lb-anim">
       <ViewHeader C={C} title="Target Tabungan" subtitle="Rencana dana jangka panjang kawasan" action={isAdmin ? { label: "Tambah Target", onClick: () => setGoalModal("new") } : null} />
@@ -1107,13 +1144,23 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
               <div className="flex items-center justify-between mt-3 text-xs" style={{ color: C.textFaint }}>
                 <span>{pct.toFixed(0)}% tercapai</span><span className="flex items-center gap-1"><Calendar size={11} />{daysLeft > 0 ? `${daysLeft} hari lagi` : "Jatuh tempo"}</span>
               </div>
-              <button onClick={() => addFunds(g.id)} className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.jade, border: `1px solid ${C.border}` }}>
+              <button onClick={() => setPayGoal(g)} className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.jade, border: `1px solid ${C.border}` }}>
                 <PlusCircle size={14} /> Tambah Dana
               </button>
             </Card>
           );
         })}
       </div>
+      <QuickPaymentModal
+        open={!!payGoal}
+        onClose={() => setPayGoal(null)}
+        C={C}
+        title="Tambah Dana Tabungan"
+        itemName={payGoal?.name}
+        remaining={payGoal ? Math.max(0, payGoal.target - payGoal.current) : null}
+        confirmLabel="Tambah Dana"
+        onConfirm={confirmAddFunds}
+      />
     </div>
   );
 }
@@ -1122,13 +1169,11 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
   const today = new Date(new Date().toDateString());
   const sorted = [...bills].filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
-  const addPayment = (id) => {
-    const bill = bills.find((b) => b.id === id);
-    const amtStr = prompt(`Tambah pembayaran untuk "${bill?.name}" (Rp):`);
-    if(!amtStr) return;
-    const amt = Number(amtStr.replace(/[^0-9]/g, ""));
-    if (!amt || amt <= 0) return;
-    setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)));
+  const [payBill, setPayBill] = useState(null);
+  const confirmAddPayment = (amt) => {
+    const bill = payBill;
+    if (!bill) return;
+    setBills((prev) => prev.map((b) => (b.id === bill.id ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)));
     setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: bill.projectId, category: bill.category || "belanja", amount: amt, date: new Date().toISOString().slice(0, 10), note: `Bayar tagihan: ${bill.name}` }, ...prev]);
   };
   const markFullyPaid = (id) => {
@@ -1181,7 +1226,7 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
               <div className="mt-2"><Badge C={C} tone={isPaid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>{isPaid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera Jatuh Tempo" : "Belum Lunas"}</Badge></div>
               {!isPaid && (
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => addPayment(b.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}><PlusCircle size={14} /> Bayar</button>
+                  <button onClick={() => setPayBill(b)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}><PlusCircle size={14} /> Bayar</button>
                   <button onClick={() => markFullyPaid(b.id)} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}><CheckCircle2 size={14} /></button>
                 </div>
               )}
@@ -1189,6 +1234,16 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
           );
         })}
       </div>
+      <QuickPaymentModal
+        open={!!payBill}
+        onClose={() => setPayBill(null)}
+        C={C}
+        title="Bayar Tagihan"
+        itemName={payBill?.name}
+        remaining={payBill ? Math.max(0, payBill.amount - payBill.paidAmount) : null}
+        confirmLabel="Bayar"
+        onConfirm={confirmAddPayment}
+      />
     </div>
   );
 }
@@ -1197,13 +1252,11 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
   const today = new Date(new Date().toDateString());
   const sorted = [...debts].filter((d) => activeProject === "all" || d.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
-  const addPayment = (id) => {
-    const debt = debts.find((d) => d.id === id);
-    const amtStr = prompt(`Tambah cicilan untuk "${debt?.name}" (Rp):`);
-    if(!amtStr) return;
-    const amt = Number(amtStr.replace(/[^0-9]/g, ""));
-    if (!amt || amt <= 0) return;
-    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)));
+  const [payDebt, setPayDebt] = useState(null);
+  const confirmAddPayment = (amt) => {
+    const debt = payDebt;
+    if (!debt) return;
+    setDebts((prev) => prev.map((d) => (d.id === debt.id ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)));
     setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: debt.projectId, category: "bayar-hutang", amount: amt, date: new Date().toISOString().slice(0, 10), note: `Cicilan hutang: ${debt.name}` }, ...prev]);
   };
   const markFullyPaid = (id) => {
@@ -1254,7 +1307,7 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
               <div className="mt-2"><Badge C={C} tone={isPaid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>{isPaid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera Jatuh Tempo" : "Belum Lunas"}</Badge></div>
               {!isPaid && (
                 <div className="flex gap-2 mt-4">
-                  <button onClick={() => addPayment(d.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}><PlusCircle size={14} /> Cicil</button>
+                  <button onClick={() => setPayDebt(d)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}><PlusCircle size={14} /> Cicil</button>
                   <button onClick={() => markFullyPaid(d.id)} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}><CheckCircle2 size={14} /></button>
                 </div>
               )}
@@ -1262,6 +1315,16 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
           );
         })}
       </div>
+      <QuickPaymentModal
+        open={!!payDebt}
+        onClose={() => setPayDebt(null)}
+        C={C}
+        title="Cicil Hutang"
+        itemName={payDebt?.name}
+        remaining={payDebt ? Math.max(0, payDebt.amount - payDebt.paidAmount) : null}
+        confirmLabel="Bayar Cicilan"
+        onConfirm={confirmAddPayment}
+      />
     </div>
   );
 }
