@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   LayoutDashboard, Building2, Receipt, PiggyBank, Bell, BarChart3,
   Plus, Moon, Sun, Cloud, CloudOff, X, TrendingUp, TrendingDown,
@@ -142,7 +143,9 @@ function IconBtn({ onClick, children, C, title }) {
 
 function Modal({ open, onClose, title, children, C }) {
   if (!open) return null;
-  return (
+  // Render lewat portal langsung ke <body> supaya modal selalu menutupi seluruh
+  // layar (viewport penuh), tidak terjebak/terpotong oleh kontainer induk mana pun.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.55)", animation: "lbFadeIn .18s ease" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[88vh] overflow-y-auto" style={{ background: C.surface, border: `1px solid ${C.border}`, animation: "lbSlideUp .22s cubic-bezier(.2,.8,.2,1)" }}>
         <div className="flex items-center justify-between mb-4">
@@ -151,7 +154,8 @@ function Modal({ open, onClose, title, children, C }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -216,7 +220,7 @@ function CalculatorPopover({ C, initial, onApply, onClose }) {
   const formatted = display ? Number(display).toLocaleString("id-ID") : "0";
   const BTN = "py-3 rounded-xl text-base font-medium transition-transform duration-100 active:scale-95";
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xs rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3">
@@ -249,7 +253,8 @@ function CalculatorPopover({ C, initial, onApply, onClose }) {
           Gunakan Nominal Ini
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
