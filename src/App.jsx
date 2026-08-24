@@ -7,7 +7,7 @@ import {
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
   CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete
+  Calculator, Delete, Cake
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -77,6 +77,19 @@ const hydrateCategories = (loaded) => {
 
 const fmtIDR = (n) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n || 0);
 const fmtDate = (s) => new Date(s + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+
+// Hitung berapa hari lagi menuju ulang tahun berikutnya (mengabaikan tahun lahir),
+// dan umur yang akan genap dicapai. Return null kalau tidak ada tanggal lahir.
+const daysUntilBirthday = (birthDateStr) => {
+  if (!birthDateStr) return null;
+  const today = new Date(new Date().toDateString());
+  const birth = new Date(birthDateStr + "T00:00:00");
+  let next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+  if (next < today) next = new Date(today.getFullYear() + 1, birth.getMonth(), birth.getDate());
+  const days = Math.round((next - today) / 86400000);
+  const nextAge = next.getFullYear() - birth.getFullYear();
+  return { days, nextAge, date: next };
+};
 const monthKey = (s) => s.slice(0, 7);
 const monthLabel = (key) => {
   const [y, m] = key.split("-").map(Number);
@@ -448,11 +461,6 @@ export default function App() {
     [projects, activeProject]
   );
 
-  const totalModal = useMemo(
-    () => (activeProject === "all" ? projects.reduce((s, p) => s + (p.modal || 0), 0) : projects.find((p) => p.id === activeProject)?.modal || 0),
-    [projects, activeProject]
-  );
-
   const categoryBreakdown = useMemo(() => {
     const map = {};
     scopedTx.filter((t) => t.type === "expense").forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
@@ -546,7 +554,7 @@ export default function App() {
 
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
-          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, totalModal, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
+          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />}
           {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
@@ -651,10 +659,16 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
   );
 }
 
-function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, totalModal, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }) {
+function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }) {
   const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
   const recent = scopedTx.slice(0, 5);
   const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
+
+  const upcomingBirthdays = (people || [])
+    .map((p) => ({ person: p, bday: daysUntilBirthday(p.birthDate) }))
+    .filter((x) => x.bday && x.bday.days <= 30)
+    .sort((a, b) => a.bday.days - b.bday.days)
+    .slice(0, 5);
 
   return (
     <div className="space-y-6 lb-anim">
@@ -676,8 +690,22 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, total
               );
             })}
           </div>
+          {upcomingBirthdays.length > 0 && (
+            <div className="px-5 pb-5">
+              <div className="flex items-center gap-1.5 mb-2 text-xs font-medium" style={{ color: C.gold }}><Cake size={13} /> Ulang Tahun Segera</div>
+              <div className="space-y-1.5">
+                {upcomingBirthdays.map(({ person, bday }) => (
+                  <div key={person.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: C.goldSoft }}>
+                    <span className="text-sm">{person.name}</span>
+                    <span className="text-xs font-medium" style={{ color: C.gold }}>{bday.days === 0 ? "Hari ini! 🎉" : `${bday.days} hari lagi`} · ke-{bday.nextAge}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       )}
+
 
       <div className="relative overflow-hidden rounded-2xl px-6 py-7 sm:px-8 sm:py-9" style={{ background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surface2} 100%)`, border: `1px solid ${C.border}` }}>
         <ContourLines color={C.jade} opacity={isDark ? 0.16 : 0.09} />
@@ -691,10 +719,6 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, total
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 32, fontWeight: 600, color: totals.balance >= 0 ? C.jade : C.coral }}>{fmtIDR(totals.balance)}</div>
             </div>
             <div className="flex gap-6">
-              <div>
-                <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><Landmark size={14} color={C.gold} /> Modal Awal</div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600, color: C.gold }}>{fmtIDR(totalModal)}</div>
-              </div>
               <div>
                 <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><ArrowUpRight size={14} color={C.jade} /> Pemasukan</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600 }}>{fmtIDR(totals.income)}</div>
@@ -897,10 +921,6 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 17 }}>{p.name}</div>
                   <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textFaint }}><MapPin size={11} />{p.location}</div>
                   <p className="text-xs mb-4" style={{ color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</p>
-                  <div className="mb-3 px-3 py-2 rounded-lg flex items-center justify-between" style={{ background: C.goldSoft }}>
-                    <span className="text-xs" style={{ color: C.gold }}>Modal Awal</span>
-                    <span className="text-sm font-semibold" style={{ color: C.gold, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(p.modal || 0)}</span>
-                  </div>
                   <div className="grid grid-cols-2 gap-3 text-xs mb-3">
                     <div>
                       <div style={{ color: C.textFaint }}>Pemasukan</div>
@@ -1045,14 +1065,19 @@ function BudgetView({ C, projects, transactions, thisMonthKey, categories, activ
   );
 }
 
-function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject }) {
+function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject, setTransactions }) {
   const shownGoals = activeProject === "all" ? goals : goals.filter((g) => g.projectId === activeProject || g.projectId === "all");
   const addFunds = (id) => {
+    const goal = goals.find((g) => g.id === id);
     const amtStr = prompt("Tambah dana tabungan (Rp):");
     if (!amtStr) return;
     const n = Number(amtStr.replace(/[^0-9]/g, ""));
     if (!n || n <= 0) return;
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, current: g.current + n } : g)));
+    const projId = goal.projectId === "all" ? (projects[0]?.id || "") : goal.projectId;
+    if (projId) {
+      setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: projId, category: "tabungan", amount: n, date: new Date().toISOString().slice(0, 10), note: `Setor ke tabungan: ${goal.name}` }, ...prev]);
+    }
   };
   return (
     <div className="space-y-5 lb-anim">
@@ -1093,7 +1118,7 @@ function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, 
   );
 }
 
-function BillsView({ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat, activeProject }) {
+function BillsView({ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat, activeProject, setTransactions }) {
   const today = new Date(new Date().toDateString());
   const sorted = [...bills].filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
@@ -1104,8 +1129,17 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
     const amt = Number(amtStr.replace(/[^0-9]/g, ""));
     if (!amt || amt <= 0) return;
     setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)));
+    setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: bill.projectId, category: bill.category || "belanja", amount: amt, date: new Date().toISOString().slice(0, 10), note: `Bayar tagihan: ${bill.name}` }, ...prev]);
   };
-  const markFullyPaid = (id) => setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: b.amount } : b)));
+  const markFullyPaid = (id) => {
+    const bill = bills.find((b) => b.id === id);
+    if (!bill) return;
+    const remaining = Math.max(0, bill.amount - bill.paidAmount);
+    setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: b.amount } : b)));
+    if (remaining > 0) {
+      setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: bill.projectId, category: bill.category || "belanja", amount: remaining, date: new Date().toISOString().slice(0, 10), note: `Pelunasan tagihan: ${bill.name}` }, ...prev]);
+    }
+  };
 
   return (
     <div className="space-y-5 lb-anim">
@@ -1159,7 +1193,7 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
   );
 }
 
-function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin, activeProject }) {
+function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin, activeProject, setTransactions }) {
   const today = new Date(new Date().toDateString());
   const sorted = [...debts].filter((d) => activeProject === "all" || d.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
@@ -1170,8 +1204,17 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
     const amt = Number(amtStr.replace(/[^0-9]/g, ""));
     if (!amt || amt <= 0) return;
     setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)));
+    setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: debt.projectId, category: "bayar-hutang", amount: amt, date: new Date().toISOString().slice(0, 10), note: `Cicilan hutang: ${debt.name}` }, ...prev]);
   };
-  const markFullyPaid = (id) => setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: d.amount } : d)));
+  const markFullyPaid = (id) => {
+    const debt = debts.find((d) => d.id === id);
+    if (!debt) return;
+    const remaining = Math.max(0, debt.amount - debt.paidAmount);
+    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: d.amount } : d)));
+    if (remaining > 0) {
+      setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: debt.projectId, category: "bayar-hutang", amount: remaining, date: new Date().toISOString().slice(0, 10), note: `Pelunasan hutang: ${debt.name}` }, ...prev]);
+    }
+  };
 
   return (
     <div className="space-y-5 lb-anim">
@@ -1264,6 +1307,19 @@ function PeopleView({ C, people, setPeople, projects, projectName, setPersonModa
                 </>
               )}
             </div>
+            {(() => {
+              const bday = daysUntilBirthday(p.birthDate);
+              if (!bday) return null;
+              const soon = bday.days <= 30;
+              return (
+                <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                  <span className="flex items-center gap-1.5 text-xs" style={{ color: soon ? C.gold : C.textFaint }}>
+                    <Cake size={13} /> Ultah ke-{bday.nextAge}
+                  </span>
+                  <Badge C={C} tone={soon ? "gold" : "neutral"}>{bday.days === 0 ? "Hari ini! 🎉" : `${bday.days} hari lagi`}</Badge>
+                </div>
+              );
+            })()}
           </Card>
         ))}
       </div>
@@ -1593,29 +1649,26 @@ function AddBillModal({ open, onClose, C, projects, categories, editing, onSave 
 function AddProjectModal({ open, onClose, C, editing, onSave }) {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
-  const [modal, setModal] = useState("");
   const [budget, setBudget] = useState("");
   const [manager, setManager] = useState("");
   const [desc, setDesc] = useState("");
   const isEditing = !!editing;
 
   useEffect(() => {
-    if (open && editing) { setName(editing.name); setLocation(editing.location); setModal(String(editing.modal || 0)); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || ""); } 
-    else if (open && !editing) { setName(""); setLocation(""); setModal(""); setBudget(""); setManager(""); setDesc(""); }
+    if (open && editing) { setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget)); setManager(editing.manager || ""); setDesc(editing.desc || ""); } 
+    else if (open && !editing) { setName(""); setLocation(""); setBudget(""); setManager(""); setDesc(""); }
   }, [open, editing]);
 
   const submit = () => {
     const b = Number(String(budget).replace(/[^0-9]/g, ''));
-    const m = Number(String(modal).replace(/[^0-9]/g, '')) || 0;
     if (!name || !location || !b) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, modal: m, budget: b, manager, desc }); onClose();
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc }); onClose();
   };
 
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Edit Projek" : "Projek Baru"} C={C}>
       <Field label="Nama Projek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
       <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
-      <Field label="Modal Awal (Rp)" C={C}><AmountInput value={modal} onChange={setModal} C={C} /></Field>
       <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
       <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ projek" style={inputStyle(C)} /></Field>
       <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat projek" style={inputStyle(C)} /></Field>
