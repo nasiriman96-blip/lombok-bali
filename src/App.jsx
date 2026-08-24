@@ -8,7 +8,7 @@ import {
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
   CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete, Cake
+  Calculator, Delete, Cake, Percent
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -555,7 +555,7 @@ export default function App() {
         </div>
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
-          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />}
+          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, setProjects }} />}
           {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
         </main>
@@ -884,24 +884,158 @@ function KeuanganView(props) {
   );
 }
 
-function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }) {
-  // Hitung total pendapatan dan modal semua projek untuk persentase
+// Komponen inline editor untuk persentase - bisa diklik untuk edit
+function EditablePercent({ value, color, label, C, onCommit, isAdmin }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef(null);
+  const isCustom = value?.custom === true;
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const startEdit = () => {
+    if (!isAdmin) return;
+    setDraft(value.display !== null && value.display !== undefined ? String(value.display) : "");
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const raw = String(draft).replace(",", ".").trim();
+    if (raw === "" || raw === "-" || raw === "auto") {
+      onCommit(null); // kembali ke auto
+    } else {
+      const num = parseFloat(raw);
+      if (!isNaN(num) && num >= 0 && num <= 100) {
+        onCommit(num);
+      } else {
+        onCommit(null);
+      }
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setDraft("");
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") cancel();
+          }}
+          onBlur={commit}
+          placeholder="auto"
+          style={{
+            ...inputStyle(C),
+            padding: "4px 8px",
+            fontSize: 12,
+            width: 70,
+            fontFamily: "JetBrains Mono, monospace",
+          }}
+        />
+        <span style={{ color: C.textMuted, fontSize: 11 }}>%</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between">
+      <span style={{ color: C.textMuted, fontSize: 12 }}>{label}</span>
+      <div className="flex items-center gap-1.5">
+        {isCustom && (
+          <span title="Nilai custom (bukan kalkulasi otomatis)" style={{ color: C.gold, fontSize: 10, marginRight: 2 }}>✎</span>
+        )}
+        <span
+          onClick={startEdit}
+          style={{
+            color,
+            fontFamily: "JetBrains Mono, monospace",
+            fontWeight: 600,
+            fontSize: 12,
+            cursor: isAdmin ? "pointer" : "default",
+            padding: "2px 6px",
+            borderRadius: 6,
+            transition: "background .15s",
+          }}
+          title={isAdmin ? "Klik untuk edit persentase" : ""}
+          onMouseEnter={(e) => { if (isAdmin) e.currentTarget.style.background = C.surface2; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+        >
+          {value.display !== null && value.display !== undefined ? `${Number(value.display).toFixed(1)}%` : "-"}
+        </span>
+        {isAdmin && (
+          <button
+            onClick={startEdit}
+            className="p-1 rounded transition-transform duration-150 hover:scale-110"
+            style={{ color: C.textMuted }}
+            title="Edit persentase"
+          >
+            <Pencil size={11} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, setProjects }) {
+  // Hitung total pendapatan dan modal semua projek untuk persentase default
   const totalIncomeAll = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const totalBudgetAll = projects.reduce((s, p) => s + p.budget, 0);
+
+  const updateProjectPercent = (projectId, field, value) => {
+    setProjects((prev) => prev.map((p) => {
+      if (p.id !== projectId) return p;
+      // field = "customIncomePct" atau "customBudgetPct"
+      if (value === null) {
+        const { [field]: _, ...rest } = p;
+        return rest;
+      }
+      return { ...p, [field]: value };
+    }));
+  };
 
   return (
     <div className="space-y-6 lb-anim">
       <ViewHeader C={C} title="Profil Projek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Projek", onClick: () => setProjModal("new") } : null} />
+      {isAdmin && (
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs" style={{ background: C.jadeSoft, border: `1px solid ${C.border}` }}>
+          <Percent size={14} color={C.jade} className="shrink-0 mt-0.5" />
+          <span style={{ color: C.textMuted, lineHeight: 1.5 }}>
+            <strong style={{ color: C.jade }}>Tip:</strong> Klik angka persentase atau ikon ✏️ di kartu projek untuk mengedit nilainya secara manual. Kosongkan & tekan Enter untuk kembali ke kalkulasi otomatis.
+          </span>
+        </div>
+      )}
       {projects.length === 0 && <div className="text-sm" style={{ color: C.textMuted }}>Belum ada data projek. Klik tombol tambah projek untuk mulai.</div>}
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {projects.map((p) => {
           const tx = transactions.filter((t) => t.projectId === p.id);
           const spent = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
           const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-          
-          // Hitung persentase
-          const incomePct = totalIncomeAll > 0 ? (income / totalIncomeAll) * 100 : 0;
-          const budgetPct = totalBudgetAll > 0 ? (p.budget / totalBudgetAll) * 100 : 0;
+
+          // Persentase Pendapatan: custom > auto
+          const autoIncomePct = totalIncomeAll > 0 ? (income / totalIncomeAll) * 100 : 0;
+          const incomePctDisplay = p.customIncomePct !== undefined && p.customIncomePct !== null ? p.customIncomePct : autoIncomePct;
+          const incomePctIsCustom = p.customIncomePct !== undefined && p.customIncomePct !== null;
+
+          // Persentase Modal: custom > auto
+          const autoBudgetPct = totalBudgetAll > 0 ? (p.budget / totalBudgetAll) * 100 : 0;
+          const budgetPctDisplay = p.customBudgetPct !== undefined && p.customBudgetPct !== null ? p.customBudgetPct : autoBudgetPct;
+          const budgetPctIsCustom = p.customBudgetPct !== undefined && p.customBudgetPct !== null;
 
           return (
             <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group cursor-pointer transition-transform duration-200 hover:-translate-y-1" style={{ position: "relative" }}>
@@ -917,23 +1051,35 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                   <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: C.text }}>{p.name}</div>
                   <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textMuted }}><MapPin size={11} />{p.location}</div>
                   <p className="text-xs mb-4" style={{ color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</p>
-                  
-                  {/* Persentase Pendapatan */}
+
+                  {/* Persentase Pendapatan - Editable */}
                   <div className="mb-3">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span style={{ color: C.textMuted }}>Pendapatan</span>
-                      <span style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>{incomePct.toFixed(1)}%</span>
+                    <EditablePercent
+                      value={{ display: incomePctDisplay, custom: incomePctIsCustom }}
+                      color={C.jade}
+                      label="Pendapatan"
+                      C={C}
+                      isAdmin={isAdmin}
+                      onCommit={(val) => updateProjectPercent(p.id, "customIncomePct", val)}
+                    />
+                    <div className="mt-1.5">
+                      <ProgressBar pct={incomePctDisplay} color={C.jade} C={C} height={6} />
                     </div>
-                    <ProgressBar pct={incomePct} color={C.jade} C={C} height={6} />
                   </div>
 
-                  {/* Persentase Modal */}
+                  {/* Persentase Modal - Editable */}
                   <div className="mb-3">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span style={{ color: C.textMuted }}>Modal</span>
-                      <span style={{ color: C.gold, fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>{budgetPct.toFixed(1)}%</span>
+                    <EditablePercent
+                      value={{ display: budgetPctDisplay, custom: budgetPctIsCustom }}
+                      color={C.gold}
+                      label="Modal"
+                      C={C}
+                      isAdmin={isAdmin}
+                      onCommit={(val) => updateProjectPercent(p.id, "customBudgetPct", val)}
+                    />
+                    <div className="mt-1.5">
+                      <ProgressBar pct={budgetPctDisplay} color={C.gold} C={C} height={6} />
                     </div>
-                    <ProgressBar pct={budgetPct} color={C.gold} C={C} height={6} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs mb-3">
