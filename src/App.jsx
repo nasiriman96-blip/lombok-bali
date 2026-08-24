@@ -490,12 +490,8 @@ export default function App() {
 
   const NAV = [
     { id: "dashboard", label: "Dasbor", icon: LayoutDashboard },
-    { id: "projects", label: "Proyek", icon: Building2 },
-    { id: "transactions", label: "Transaksi", icon: Receipt },
-    { id: "budget", label: "Anggaran", icon: Wallet },
-    { id: "savings", label: "Tabungan", icon: PiggyBank },
-    { id: "bills", label: "Tagihan", icon: Bell },
-    { id: "debts", label: "Hutang", icon: HandCoins },
+    { id: "projects", label: "PROJEK", icon: Building2 },
+    { id: "keuangan", label: "Keuangan", icon: Wallet },
     { id: "people", label: "Ahli", icon: Users2 },
     { id: "analytics", label: "Analitik", icon: BarChart3 },
   ];
@@ -553,11 +549,7 @@ export default function App() {
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, totalModal, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin }} />}
-          {tab === "transactions" && <TransactionsView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true) }} />}
-          {tab === "budget" && <BudgetView {...{ C, projects, transactions, thisMonthKey, categories, activeProject }} />}
-          {tab === "savings" && <SavingsView {...{ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject }} />}
-          {tab === "bills" && <BillsView {...{ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat, activeProject }} />}
-          {tab === "debts" && <DebtsView {...{ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin, activeProject }} />}
+          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
           {tab === "analytics" && <AnalyticsView {...{ C, categoryBreakdown, monthlyTrend, projectComparison, totals, activeProject, projectName }} />}
         </main>
@@ -787,7 +779,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, total
         <Card C={C} className="lg:col-span-3" pad="p-0">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Transaksi Terbaru</h3>
-            <button onClick={() => setTab("transactions")} className="text-xs font-medium" style={{ color: C.jade }}>Lihat semua</button>
+            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Lihat semua</button>
           </div>
           <div>
             {recent.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textFaint }}>Belum ada transaksi.</div>}
@@ -814,7 +806,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, total
         <Card C={C} className="lg:col-span-2" pad="p-0">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16 }}>Tagihan Mendatang</h3>
-            <button onClick={() => setTab("bills")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
+            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
           </div>
           <div className="pb-3">
             {dueSoon.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textFaint }}>Semua tagihan aman 🎉</div>}
@@ -836,6 +828,47 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, total
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// Menggabungkan Transaksi, Anggaran, Tabungan, Tagihan, dan Hutang jadi satu tab "Keuangan"
+// dengan sub-navigasi berupa pill di bagian atas.
+function KeuanganView(props) {
+  const { C } = props;
+  const [subTab, setSubTab] = useState("transactions");
+  const SUBTABS = [
+    { id: "transactions", label: "Transaksi", icon: Receipt },
+    { id: "budget", label: "Anggaran", icon: Wallet },
+    { id: "savings", label: "Tabungan", icon: PiggyBank },
+    { id: "bills", label: "Tagihan", icon: Bell },
+    { id: "debts", label: "Hutang", icon: HandCoins },
+  ];
+
+  return (
+    <div className="space-y-5 lb-anim">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {SUBTABS.map((t) => {
+          const Icon = t.icon;
+          const active = subTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setSubTab(t.id)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap shrink-0 transition-all duration-150"
+              style={{ background: active ? C.jadeSoft : C.surface2, color: active ? C.jade : C.textMuted, border: `1px solid ${active ? C.jade : C.border}` }}
+            >
+              <Icon size={14} /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {subTab === "transactions" && <TransactionsView {...props} />}
+      {subTab === "budget" && <BudgetView {...props} />}
+      {subTab === "savings" && <SavingsView {...props} />}
+      {subTab === "bills" && <BillsView {...props} />}
+      {subTab === "debts" && <DebtsView {...props} />}
     </div>
   );
 }
@@ -1097,6 +1130,7 @@ function BillsView({ C, bills, setBills, projects, projectName, setBillModal, is
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {isAdmin && <button onClick={() => setBillModal(b)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
+                  {isAdmin && <button onClick={() => { if (confirm(`Hapus tagihan "${b.name}"?`)) setBills((prev) => prev.filter((x) => x.id !== b.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>}
                   <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : `${cat.color}22` }}>
                     {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <CatIcon size={17} color={cat.color} />}
                   </div>
@@ -1160,6 +1194,7 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {isAdmin && <button onClick={() => setDebtModal(d)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
+                  {isAdmin && <button onClick={() => { if (confirm(`Hapus hutang "${d.name}"?`)) setDebts((prev) => prev.filter((x) => x.id !== d.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>}
                   <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : C.goldSoft }}>
                     {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <HandCoins size={17} color={C.gold} />}
                   </div>
