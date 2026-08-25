@@ -530,6 +530,15 @@ export default function App() {
     [projects, activeProject]
   );
 
+  // Ringkasan hutang: total seluruh hutang, dan mana yang masih aktif (belum lunas)
+  const debtsSummary = useMemo(() => {
+    const scoped = activeProject === "all" ? debts : debts.filter((d) => d.projectId === activeProject);
+    const total = scoped.reduce((s, d) => s + d.amount, 0);
+    const totalRemaining = scoped.reduce((s, d) => s + Math.max(0, d.amount - d.paidAmount), 0);
+    const activeList = scoped.filter((d) => d.paidAmount < d.amount).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    return { total, totalRemaining, activeCount: activeList.length, activeList };
+  }, [debts, activeProject]);
+
   const categoryBreakdown = useMemo(() => {
     const map = {};
     scopedTx.filter((t) => t.type === "expense").forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
@@ -626,7 +635,7 @@ export default function App() {
           </div>
         </div>
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
-          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
+          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }} />}
           {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
@@ -729,7 +738,7 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
   );
 }
 
-function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }) {
+function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }) {
   const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
   const recent = scopedTx.slice(0, 5);
   const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
@@ -956,6 +965,43 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, categ
           </div>
         </Card>
       </div>
+      {debtsSummary && (
+        <Card C={C} pad="p-0" className="lb-anim">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
+            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Ringkasan Hutang</h3>
+            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
+          </div>
+          <div className="grid grid-cols-2 gap-4 px-5 pb-4">
+            <div>
+              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Total Hutang</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.text }}>{fmtIDR(debtsSummary.total)}</div>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Hutang Aktif</div>
+              <div style={{ fontFamily: "Fraunces, serif", fontSize: 18, fontWeight: 700, color: C.gold }}>{debtsSummary.activeCount}</div>
+              <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>sisa {fmtIDR(debtsSummary.totalRemaining)}</div>
+            </div>
+          </div>
+          <div className="pb-3">
+            {debtsSummary.activeList.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Tidak ada hutang aktif 🎉</div>}
+            {debtsSummary.activeList.slice(0, 4).map((d) => {
+              const pct = d.amount ? (d.paidAmount / d.amount) * 100 : 0;
+              return (
+                <div key={d.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: C.goldSoft }}>
+                    <HandCoins size={15} color={C.gold} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate" style={{ color: C.text }}>{d.name}</div>
+                    <div className="text-xs" style={{ color: C.textMuted }}>{projectName(d.projectId)} · {pct.toFixed(0)}% terlunasi</div>
+                  </div>
+                  <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: C.gold }}>{fmtIDR(Math.max(0, d.amount - d.paidAmount))}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
       <Card C={C} pad="p-0" className="lb-anim">
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Transaksi Terbaru</h3>
