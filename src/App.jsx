@@ -757,6 +757,43 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
     ];
   }, [totals, C]);
 
+  // Tren pemasukan/pengeluaran dengan pilihan rentang waktu
+  const [trendRange, setTrendRange] = useState("6m");
+  const trendData = useMemo(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    if (trendRange === "6m") {
+      const cutoff = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const map = {};
+      scopedTx.forEach((t) => {
+        const d = new Date(t.date + "T00:00:00");
+        if (d < cutoff) return;
+        const k = monthKey(t.date);
+        if (!map[k]) map[k] = { key: k, label: monthLabel(k), Pemasukan: 0, Pengeluaran: 0 };
+        if (t.type === "income") map[k].Pemasukan += t.amount; else map[k].Pengeluaran += t.amount;
+      });
+      return Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
+    }
+    const days = trendRange === "1w" ? 7 : 30;
+    const start = new Date(now); start.setDate(start.getDate() - (days - 1));
+    const map = {};
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start); d.setDate(d.getDate() + i);
+      const k = d.toISOString().slice(0, 10);
+      map[k] = { key: k, label: d.toLocaleDateString("id-ID", { day: "numeric", month: "short" }), Pemasukan: 0, Pengeluaran: 0 };
+    }
+    scopedTx.forEach((t) => {
+      const d = new Date(t.date + "T00:00:00");
+      if (d < start) return;
+      if (map[t.date]) { if (t.type === "income") map[t.date].Pemasukan += t.amount; else map[t.date].Pengeluaran += t.amount; }
+    });
+    return Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
+  }, [scopedTx, trendRange]);
+  const TREND_RANGES = [
+    { id: "1w", label: "1 Minggu" },
+    { id: "1m", label: "1 Bulan" },
+    { id: "6m", label: "6 Bulan" },
+  ];
+
   return (
     <div className="space-y-6 lb-anim">
       {people && people.length > 0 && (
@@ -873,17 +910,61 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
           <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "Fraunces, serif", color: C.text }}>{scopedTx.length}</div>
         </Card>
       </div>
+      {debtsSummary && (
+        <Card C={C} pad="p-0" className="lb-anim">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
+            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Ringkasan Hutang</h3>
+            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
+          </div>
+          <div className="grid grid-cols-2 gap-4 px-5 pb-4">
+            <div>
+              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Total Hutang</div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.text }}>{fmtIDR(debtsSummary.total)}</div>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Hutang Aktif</div>
+              <div style={{ fontFamily: "Fraunces, serif", fontSize: 18, fontWeight: 700, color: C.gold }}>{debtsSummary.activeCount}</div>
+              <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>sisa {fmtIDR(debtsSummary.totalRemaining)}</div>
+            </div>
+          </div>
+          <div className="pb-3">
+            {debtsSummary.activeList.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Tidak ada hutang aktif 🎉</div>}
+            {debtsSummary.activeList.slice(0, 4).map((d) => {
+              const pct = d.amount ? (d.paidAmount / d.amount) * 100 : 0;
+              return (
+                <div key={d.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: C.goldSoft }}>
+                    <HandCoins size={15} color={C.gold} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate" style={{ color: C.text }}>{d.name}</div>
+                    <div className="text-xs" style={{ color: C.textMuted }}>{projectName(d.projectId)} · {pct.toFixed(0)}% terlunasi</div>
+                  </div>
+                  <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: C.gold }}>{fmtIDR(Math.max(0, d.amount - d.paidAmount))}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
       <div className="grid lg:grid-cols-5 gap-6">
         <Card C={C} className="lg:col-span-3 lb-anim">
           <div className="flex items-center justify-between mb-4">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Tren Bulanan</h3>
-            <Badge C={C} tone="jade"><TrendingUp size={12} /> 6 bulan</Badge>
+            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Tren</h3>
+            <div className="flex gap-1.5">
+              {TREND_RANGES.map((r) => (
+                <button key={r.id} onClick={() => setTrendRange(r.id)} className="px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150"
+                  style={{ background: trendRange === r.id ? C.jadeSoft : C.surface2, color: trendRange === r.id ? C.jade : C.textMuted, border: `1px solid ${trendRange === r.id ? C.jade : C.border}` }}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
-          {monthlyTrend.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data tren</div> :
+          {trendData.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data tren</div> :
             <ResponsiveContainer width="100%" height={230}>
-              <LineChart data={monthlyTrend}>
+              <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                <XAxis dataKey="label" stroke={C.textMuted} fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis dataKey="label" stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} interval={trendRange === "1m" ? 3 : 0} />
                 <YAxis stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
                 <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} />
                 <Line type="monotone" dataKey="Pemasukan" stroke={C.jade} strokeWidth={2.5} dot={{ r: 3 }} />
@@ -965,43 +1046,6 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
           </div>
         </Card>
       </div>
-      {debtsSummary && (
-        <Card C={C} pad="p-0" className="lb-anim">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Ringkasan Hutang</h3>
-            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
-          </div>
-          <div className="grid grid-cols-2 gap-4 px-5 pb-4">
-            <div>
-              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Total Hutang</div>
-              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.text }}>{fmtIDR(debtsSummary.total)}</div>
-            </div>
-            <div>
-              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Hutang Aktif</div>
-              <div style={{ fontFamily: "Fraunces, serif", fontSize: 18, fontWeight: 700, color: C.gold }}>{debtsSummary.activeCount}</div>
-              <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>sisa {fmtIDR(debtsSummary.totalRemaining)}</div>
-            </div>
-          </div>
-          <div className="pb-3">
-            {debtsSummary.activeList.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Tidak ada hutang aktif 🎉</div>}
-            {debtsSummary.activeList.slice(0, 4).map((d) => {
-              const pct = d.amount ? (d.paidAmount / d.amount) * 100 : 0;
-              return (
-                <div key={d.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: C.goldSoft }}>
-                    <HandCoins size={15} color={C.gold} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" style={{ color: C.text }}>{d.name}</div>
-                    <div className="text-xs" style={{ color: C.textMuted }}>{projectName(d.projectId)} · {pct.toFixed(0)}% terlunasi</div>
-                  </div>
-                  <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: C.gold }}>{fmtIDR(Math.max(0, d.amount - d.paidAmount))}</div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
       <Card C={C} pad="p-0" className="lb-anim">
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Transaksi Terbaru</h3>
