@@ -869,7 +869,10 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
                   <Coins size={13} /> Porsi Modal
                 </div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 600, color: C.text }}>{fmtIDR(totals.modal)}</div>
-                <div className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>
+                <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                  <div style={{ width: `${totals.income ? (totals.modal / totals.income) * 100 : 0}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                </div>
+                <div className="text-[11px] mt-1" style={{ color: C.textMuted }}>
                   {totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}% dari pemasukan
                 </div>
               </div>
@@ -878,7 +881,10 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
                   <TrendingUp size={13} /> Porsi Keuntungan
                 </div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 600, color: C.text }}>{fmtIDR(totals.profit)}</div>
-                <div className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>
+                <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                  <div style={{ width: `${totals.income ? (totals.profit / totals.income) * 100 : 0}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                </div>
+                <div className="text-[11px] mt-1" style={{ color: C.textMuted }}>
                   {totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}% dari pemasukan
                 </div>
               </div>
@@ -1197,20 +1203,24 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                           <Coins size={10} /> Modal
                         </div>
                         <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(totalModal)}</div>
+                        {totalIncome > 0 && (
+                          <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                            <div style={{ width: `${(totalModal / totalIncome) * 100}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-1 text-[10px]" style={{ color: C.jade }}>
                           <TrendingUp size={10} /> Keuntungan
                         </div>
                         <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(totalProfit)}</div>
+                        {totalIncome > 0 && (
+                          <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                            <div style={{ width: `${(totalProfit / totalIncome) * 100}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                          </div>
+                        )}
                       </div>
                     </div>
-                    {totalIncome > 0 && (
-                      <div className="mt-2 flex h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                        <div style={{ width: `${(totalModal / totalIncome) * 100}%`, background: C.blue, transition: "width .5s" }} />
-                        <div style={{ width: `${(totalProfit / totalIncome) * 100}%`, background: C.jade, transition: "width .5s" }} />
-                      </div>
-                    )}
                   </div>
 
                   <div className="text-xs mb-3">
@@ -1693,10 +1703,16 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
               <div>
                 <div className="text-xs mb-1 flex items-center gap-1" style={{ color: C.blue }}><Coins size={11} /> Modal</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(totals.modal)}</div>
+                <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                  <div style={{ width: `${totals.income ? (totals.modal / totals.income) * 100 : 0}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                </div>
               </div>
               <div>
                 <div className="text-xs mb-1 flex items-center gap-1" style={{ color: C.jade }}><TrendingUp size={11} /> Keuntungan</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(totals.profit)}</div>
+                <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                  <div style={{ width: `${totals.income ? (totals.profit / totals.income) * 100 : 0}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                </div>
               </div>
             </div>
           </Card>
@@ -1718,12 +1734,18 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
                 <div className="p-2.5 rounded-lg" style={{ background: `${C.blue}15` }}>
                   <div className="text-[11px] font-medium" style={{ color: C.blue }}>Total Modal</div>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: C.text }}>{fmtIDR(totals.modal)}</div>
-                  <div className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}%</div>
+                  <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                    <div style={{ width: `${totals.income ? (totals.modal / totals.income) * 100 : 0}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                  </div>
+                  <div className="text-[10px] mt-1" style={{ color: C.textMuted }}>{totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}%</div>
                 </div>
                 <div className="p-2.5 rounded-lg" style={{ background: C.jadeSoft }}>
                   <div className="text-[11px] font-medium" style={{ color: C.jade }}>Total Keuntungan</div>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: C.text }}>{fmtIDR(totals.profit)}</div>
-                  <div className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}%</div>
+                  <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                    <div style={{ width: `${totals.income ? (totals.profit / totals.income) * 100 : 0}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
+                  </div>
+                  <div className="text-[10px] mt-1" style={{ color: C.textMuted }}>{totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}%</div>
                 </div>
               </div>
             </>
