@@ -507,7 +507,7 @@ export default function App() {
 
   // Totals dengan breakdown modal vs keuntungan
   const totals = useMemo(() => {
-    let income = 0, expense = 0, modal = 0, profit = 0;
+    let income = 0, expense = 0, modal = 0, profit = 0, modalUsed = 0, profitUsed = 0;
     scopedTx.forEach((t) => {
       if (t.type === "income") {
         income += t.amount;
@@ -515,9 +515,17 @@ export default function App() {
         if (s) { modal += s.modal; profit += s.profit; }
       } else {
         expense += t.amount;
+        // Pengeluaran ditandai sumber dananya: "modal" atau "profit" (default profit kalau belum ditandai / data lama)
+        if (t.fundSource === "modal") modalUsed += t.amount; else profitUsed += t.amount;
       }
     });
-    return { income, expense, balance: income - expense, modal, profit };
+    return {
+      income, expense, balance: income - expense,
+      modal, profit,
+      modalUsed, profitUsed,
+      modalBalance: modal - modalUsed,
+      profitBalance: profit - profitUsed,
+    };
   }, [scopedTx, projects]);
 
   const thisMonthKey = new Date().toISOString().slice(0, 7);
@@ -974,7 +982,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
           }
         </Card>
         <Card C={C} className="lg:col-span-2">
-          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Pembagian Pemasukan</h3>
+          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Modal & Keuntungan</h3>
           {modalVsProfitData.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada pemasukan</div> :
             <>
               <ResponsiveContainer width="100%" height={160}>
@@ -985,11 +993,19 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
                   <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-2 mt-2">
                 {modalVsProfitData.map((c) => (
-                  <div key={c.name} className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5" style={{ color: C.textMuted }}><span className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.name}</span>
-                    <span style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(c.value)}</span>
+                  <div key={c.name} className="text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5" style={{ color: C.textMuted }}><span className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.name}</span>
+                      <span style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(c.value)}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5 pl-3.5" style={{ color: C.textFaint }}>
+                      <span>Sisa (belum dipakai)</span>
+                      <span style={{ fontFamily: "JetBrains Mono, monospace", color: (c.name === "Modal" ? totals.modalBalance : totals.profitBalance) < 0 ? C.coral : C.textFaint }}>
+                        {fmtIDR(c.name === "Modal" ? totals.modalBalance : totals.profitBalance)}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1282,6 +1298,11 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
                         K {fmtIDR(split.profit)}
                       </span>
                     </>
+                  )}
+                  {t.type === "expense" && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={t.fundSource === "modal" ? { background: `${C.blue}22`, color: C.blue } : { background: C.jadeSoft, color: C.jade }}>
+                      {t.fundSource === "modal" ? "Dari Modal" : "Dari Keuntungan"}
+                    </span>
                   )}
                 </div>
               </div>
@@ -1833,12 +1854,15 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   // Split percent khusus transaksi ini (optional override terhadap project default)
   const [customSplit, setCustomSplit] = useState(false);
   const [splitModalPct, setSplitModalPct] = useState(String(DEFAULT_MODAL_PERCENT));
+  // Sumber dana untuk pengeluaran: dari kantong "modal" atau "profit" (keuntungan)
+  const [fundSource, setFundSource] = useState("profit");
   const isEditing = !!editing;
 
   useEffect(() => {
     if (open && editing) {
       setType(editing.type); setProjectId(editing.projectId); setCategory(editing.category);
       setAmount(String(editing.amount)); setDate(editing.date); setNote(editing.note);
+      setFundSource(editing.fundSource === "modal" ? "modal" : "profit");
       if (editing.splitModalPct != null) {
         setCustomSplit(true);
         setSplitModalPct(String(editing.splitModalPct));
@@ -1849,6 +1873,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
     } else if (open && !editing) {
       setType("expense"); setProjectId(projects[0]?.id || ""); setCategory(categories[0]?.id || "");
       setAmount(""); setDate(new Date().toISOString().slice(0, 10)); setNote("");
+      setFundSource("profit");
       setCustomSplit(false);
       setSplitModalPct(String(projects[0]?.modalPercent ?? DEFAULT_MODAL_PERCENT));
     }
@@ -1880,16 +1905,17 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
         data.splitProfit = splitProfitAmt;
         data.splitModalPct = modalPctNum;
       }
+      if (type === "expense") data.fundSource = fundSource;
       onEditTransaction(editing.id, data);
       onClose(); return;
     }
     if (type === "goal") {
       const g = goals.find((x) => x.id === goalId); if (!g) return;
-      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}` });
+      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}`, fundSource });
       onContributeGoal(goalId, amtNum);
     } else if (type === "debt") {
       const d = (debts || []).find((x) => x.id === debtId); if (!d) return;
-      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amtNum, date, note: note || `Cicilan hutang: ${d.name}` });
+      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amtNum, date, note: note || `Cicilan hutang: ${d.name}`, fundSource });
       onPayDebt(debtId, amtNum);
     } else {
       if (!note || !projectId) return;
@@ -1899,6 +1925,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
         tx.splitProfit = splitProfitAmt;
         tx.splitModalPct = modalPctNum;
       }
+      if (type === "expense") tx.fundSource = fundSource;
       onAddTransaction(tx);
     }
     onClose();
@@ -1957,6 +1984,21 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
         </Field>
       )}
       <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+
+      {(type === "expense" || type === "goal" || type === "debt") && (
+        <Field label="Sumber Dana" C={C}>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setFundSource("profit")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center justify-center gap-1.5"
+              style={{ background: fundSource === "profit" ? C.jadeSoft : C.surface2, color: fundSource === "profit" ? C.jade : C.textMuted, border: `1px solid ${fundSource === "profit" ? C.jade : C.border}` }}>
+              <TrendingUp size={14} /> Keuntungan
+            </button>
+            <button type="button" onClick={() => setFundSource("modal")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center justify-center gap-1.5"
+              style={{ background: fundSource === "modal" ? C.jadeSoft : C.surface2, color: fundSource === "modal" ? C.blue : C.textMuted, border: `1px solid ${fundSource === "modal" ? C.blue : C.border}` }}>
+              <Landmark size={14} /> Modal
+            </button>
+          </div>
+        </Field>
+      )}
 
       {/* Preview split pemasukan */}
       {type === "income" && amtNum > 0 && (
