@@ -8,7 +8,7 @@ import {
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
   CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete, Cake, Split, Coins, TrendingDown as ProfitIcon
+  Calculator, Delete, Cake, Split, Coins, TrendingDown as ProfitIcon, Share2
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -628,6 +628,24 @@ export default function App() {
           </div>
           <IconBtn C={C} onClick={() => setIsDark((d) => !d)}>{isDark ? <Sun size={16} /> : <Moon size={16} />}</IconBtn>
         </div>
+        {/* BOTTOM NAVIGATION (mobile) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch" style={{ background: C.bgSoft, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {NAV.map((n) => {
+            const Icon = n.icon;
+            const active = tab === n.id;
+            return (
+              <button
+                key={n.id}
+                onClick={() => setTab(n.id)}
+                className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-colors duration-150"
+                style={{ color: active ? C.jade : C.textMuted }}
+              >
+                <Icon size={19} />
+                <span className="text-[10px] font-medium leading-none">{n.label}</span>
+              </button>
+            );
+          })}
+        </nav>
         <div className="md:hidden fixed inset-0 z-50" style={{ pointerEvents: mobileNav ? "auto" : "none" }} aria-hidden={!mobileNav}>
           <div onClick={() => setMobileNav(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", opacity: mobileNav ? 1 : 0, transition: "opacity .25s ease" }} />
           <div className="absolute top-0 left-0 h-full w-72 max-w-[82vw] px-4 py-5 flex flex-col overflow-y-auto" style={{ background: C.bgSoft, borderRight: `1px solid ${C.border}`, transform: mobileNav ? "translateX(0)" : "translateX(-100%)", transition: "transform .28s cubic-bezier(.2,.8,.2,1)" }}>
@@ -636,20 +654,17 @@ export default function App() {
               <button onClick={() => setMobileNav(false)} style={{ color: C.textMuted }}><X size={20} /></button>
             </div>
             <ProjectSwitcher {...{ projects, activeProject, setActiveProject: (v) => { setActiveProject(v); setMobileNav(false); }, C }} />
-            <nav className="mt-6 flex-1 space-y-1">
-              {NAV.map((n) => <NavItem key={n.id} n={n} active={tab === n.id} onClick={() => { setTab(n.id); setMobileNav(false); }} C={C} />)}
-            </nav>
             <SyncFooter syncState={syncState} isDark={isDark} setIsDark={setIsDark} C={C} user={user} onLogout={handleLogout} />
           </div>
         </div>
-        <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }} />}
           {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
         </main>
       </div>
-      <button onClick={() => setTxModal("new")} className="fixed bottom-6 right-6 z-30 flex items-center gap-2 px-5 py-3.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, color: "#08130F", fontWeight: 600, boxShadow: C.shadowLg }}>
+      <button onClick={() => setTxModal("new")} className="fixed bottom-20 md:bottom-6 right-6 z-30 flex items-center gap-2 px-5 py-3.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, color: "#08130F", fontWeight: 600, boxShadow: C.shadowLg }}>
         <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
       </button>
       <AddTransactionModal
@@ -869,10 +884,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
                   <Coins size={13} /> Porsi Modal
                 </div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 600, color: C.text }}>{fmtIDR(totals.modal)}</div>
-                <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                  <div style={{ width: `${totals.income ? (totals.modal / totals.income) * 100 : 0}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                </div>
-                <div className="text-[11px] mt-1" style={{ color: C.textMuted }}>
+                <div className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>
                   {totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}% dari pemasukan
                 </div>
               </div>
@@ -881,10 +893,7 @@ function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debts
                   <TrendingUp size={13} /> Porsi Keuntungan
                 </div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 600, color: C.text }}>{fmtIDR(totals.profit)}</div>
-                <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                  <div style={{ width: `${totals.income ? (totals.profit / totals.income) * 100 : 0}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                </div>
-                <div className="text-[11px] mt-1" style={{ color: C.textMuted }}>
+                <div className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>
                   {totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}% dari pemasukan
                 </div>
               </div>
@@ -1117,6 +1126,7 @@ function KeuanganView(props) {
     { id: "bills", label: "Tagihan", icon: Bell },
     { id: "debts", label: "Hutang", icon: HandCoins },
     { id: "analytics", label: "Analitik", icon: BarChart3 },
+    { id: "laporan", label: "Laporan", icon: Share2 },
   ];
   return (
     <div className="space-y-5 lb-anim">
@@ -1142,6 +1152,91 @@ function KeuanganView(props) {
       {subTab === "bills" && <BillsView {...props} />}
       {subTab === "debts" && <DebtsView {...props} />}
       {subTab === "analytics" && <AnalyticsView {...props} />}
+      {subTab === "laporan" && <LaporanView {...props} />}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   LAPORAN — generate ringkasan teks & kirim via WhatsApp
+----------------------------------------------------------------*/
+function LaporanView({ C, projects, transactions, activeProject, projectName, totals, debtsSummary, thisMonthKey, categories, getCat }) {
+  const [phone, setPhone] = useState("");
+  const [range, setRange] = useState("month");
+
+  const scopedTx = useMemo(() => {
+    const byProject = activeProject === "all" ? transactions : transactions.filter((t) => t.projectId === activeProject);
+    if (range === "all") return byProject;
+    return byProject.filter((t) => monthKey(t.date) === thisMonthKey);
+  }, [transactions, activeProject, range, thisMonthKey]);
+
+  const reportText = useMemo(() => {
+    const income = scopedTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expense = scopedTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+    const byCat = {};
+    scopedTx.filter((t) => t.type === "expense").forEach((t) => {
+      const label = getCat ? getCat(t.category).label : t.category;
+      byCat[label] = (byCat[label] || 0) + t.amount;
+    });
+    const catLines = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([label, amt]) => `   • ${label}: ${fmtIDR(amt)}`).join("\n");
+
+    const scopeLabel = activeProject === "all" ? "Seluruh Kawasan" : projectName(activeProject);
+    const periodLabel = range === "month" ? `Bulan ${monthLabel(thisMonthKey)}` : "Seluruh Periode";
+
+    let text = `*📊 LAPORAN KEUANGAN LOMBOK BALI*\n`;
+    text += `Kawasan: ${scopeLabel}\n`;
+    text += `Periode: ${periodLabel}\n`;
+    text += `Tanggal cetak: ${fmtDate(new Date().toISOString().slice(0, 10))}\n\n`;
+    text += `💰 Pemasukan: ${fmtIDR(income)}\n`;
+    text += `💸 Pengeluaran: ${fmtIDR(expense)}\n`;
+    text += `📈 Saldo Bersih: ${fmtIDR(income - expense)}\n\n`;
+    if (catLines) text += `*Rincian Pengeluaran per Kategori:*\n${catLines}\n\n`;
+    if (debtsSummary) {
+      text += `*Hutang:*\n`;
+      text += `   • Total Hutang: ${fmtIDR(debtsSummary.total)}\n`;
+      text += `   • Hutang Aktif: ${debtsSummary.activeCount} (sisa ${fmtIDR(debtsSummary.totalRemaining)})\n\n`;
+    }
+    text += `_Laporan otomatis dari aplikasi Lombok Bali_`;
+    return text;
+  }, [scopedTx, activeProject, projectName, range, thisMonthKey, debtsSummary, getCat]);
+
+  const sendToWhatsApp = () => {
+    const cleanPhone = phone.replace(/[^0-9]/g, "").replace(/^0/, "62");
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(reportText)}`
+      : `https://wa.me/?text=${encodeURIComponent(reportText)}`;
+    window.open(url, "_blank");
+  };
+
+  return (
+    <div className="space-y-5 lb-anim">
+      <ViewHeader C={C} title="Laporan Keuangan" subtitle="Buat ringkasan laporan dan kirim langsung ke WhatsApp" />
+      <div className="grid lg:grid-cols-5 gap-5">
+        <Card C={C} className="lg:col-span-2">
+          <div className="mb-4">
+            <div className="text-xs font-medium mb-2" style={{ color: C.textMuted }}>Periode</div>
+            <div className="flex gap-2">
+              {[{ id: "month", label: "Bulan Ini" }, { id: "all", label: "Semua" }].map((r) => (
+                <button key={r.id} onClick={() => setRange(r.id)} className="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+                  style={{ background: range === r.id ? C.jadeSoft : C.surface2, color: range === r.id ? C.jade : C.textMuted, border: `1px solid ${range === r.id ? C.jade : C.border}` }}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Field label="Nomor WhatsApp Tujuan (opsional)" C={C}>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Contoh: 08123456789" style={inputStyle(C)} />
+          </Field>
+          <p className="text-xs mb-4" style={{ color: C.textFaint }}>Kosongkan untuk memilih kontak langsung di WhatsApp.</p>
+          <button onClick={sendToWhatsApp} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: "#25D366", color: "#08130F" }}>
+            <Share2 size={16} /> Kirim ke WhatsApp
+          </button>
+        </Card>
+        <Card C={C} className="lg:col-span-3">
+          <div className="text-xs font-medium mb-2" style={{ color: C.textMuted }}>Pratinjau Laporan</div>
+          <pre className="text-xs whitespace-pre-wrap rounded-xl p-4" style={{ background: C.surface2, color: C.text, fontFamily: "JetBrains Mono, monospace", lineHeight: 1.6, maxHeight: 420, overflowY: "auto" }}>{reportText}</pre>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -1203,24 +1298,20 @@ function ProjectsView({ C, projects, transactions, setActiveProject, setTab, set
                           <Coins size={10} /> Modal
                         </div>
                         <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(totalModal)}</div>
-                        {totalIncome > 0 && (
-                          <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                            <div style={{ width: `${(totalModal / totalIncome) * 100}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                          </div>
-                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-1 text-[10px]" style={{ color: C.jade }}>
                           <TrendingUp size={10} /> Keuntungan
                         </div>
                         <div className="font-semibold text-sm" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(totalProfit)}</div>
-                        {totalIncome > 0 && (
-                          <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                            <div style={{ width: `${(totalProfit / totalIncome) * 100}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                          </div>
-                        )}
                       </div>
                     </div>
+                    {totalIncome > 0 && (
+                      <div className="mt-2 flex h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                        <div style={{ width: `${(totalModal / totalIncome) * 100}%`, background: C.blue, transition: "width .5s" }} />
+                        <div style={{ width: `${(totalProfit / totalIncome) * 100}%`, background: C.jade, transition: "width .5s" }} />
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-xs mb-3">
@@ -1703,16 +1794,10 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
               <div>
                 <div className="text-xs mb-1 flex items-center gap-1" style={{ color: C.blue }}><Coins size={11} /> Modal</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(totals.modal)}</div>
-                <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                  <div style={{ width: `${totals.income ? (totals.modal / totals.income) * 100 : 0}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                </div>
               </div>
               <div>
                 <div className="text-xs mb-1 flex items-center gap-1" style={{ color: C.jade }}><TrendingUp size={11} /> Keuntungan</div>
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(totals.profit)}</div>
-                <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                  <div style={{ width: `${totals.income ? (totals.profit / totals.income) * 100 : 0}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                </div>
               </div>
             </div>
           </Card>
@@ -1734,18 +1819,12 @@ function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, 
                 <div className="p-2.5 rounded-lg" style={{ background: `${C.blue}15` }}>
                   <div className="text-[11px] font-medium" style={{ color: C.blue }}>Total Modal</div>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: C.text }}>{fmtIDR(totals.modal)}</div>
-                  <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                    <div style={{ width: `${totals.income ? (totals.modal / totals.income) * 100 : 0}%`, background: C.blue, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                  </div>
-                  <div className="text-[10px] mt-1" style={{ color: C.textMuted }}>{totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}%</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{totals.income ? ((totals.modal / totals.income) * 100).toFixed(1) : 0}%</div>
                 </div>
                 <div className="p-2.5 rounded-lg" style={{ background: C.jadeSoft }}>
                   <div className="text-[11px] font-medium" style={{ color: C.jade }}>Total Keuntungan</div>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: C.text }}>{fmtIDR(totals.profit)}</div>
-                  <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
-                    <div style={{ width: `${totals.income ? (totals.profit / totals.income) * 100 : 0}%`, background: C.jade, height: "100%", borderRadius: 999, transition: "width .5s" }} />
-                  </div>
-                  <div className="text-[10px] mt-1" style={{ color: C.textMuted }}>{totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}%</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>{totals.income ? ((totals.profit / totals.income) * 100).toFixed(1) : 0}%</div>
                 </div>
               </div>
             </>
@@ -1873,6 +1952,12 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const [note, setNote] = useState("");
   const [goalId, setGoalId] = useState(goals[0]?.id || "");
   const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
+  // Baris kategori+jumlah untuk pengeluaran multi-kategori (hanya dipakai saat tambah baru, bukan edit)
+  const [items, setItems] = useState([{ id: uid("i"), category: categories[0]?.id || "", amount: "" }]);
+  const addItem = () => setItems((prev) => [...prev, { id: uid("i"), category: categories[0]?.id || "", amount: "" }]);
+  const removeItem = (id) => setItems((prev) => (prev.length > 1 ? prev.filter((it) => it.id !== id) : prev));
+  const updateItem = (id, field, value) => setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
+  const itemsTotal = items.reduce((s, it) => s + (Number(String(it.amount).replace(/[^0-9]/g, "")) || 0), 0);
   // Split percent khusus transaksi ini (optional override terhadap project default)
   const [customSplit, setCustomSplit] = useState(false);
   const [splitModalPct, setSplitModalPct] = useState(String(DEFAULT_MODAL_PERCENT));
@@ -1898,6 +1983,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       setFundSource("profit");
       setCustomSplit(false);
       setSplitModalPct(String(projects[0]?.modalPercent ?? DEFAULT_MODAL_PERCENT));
+      setItems([{ id: uid("i"), category: categories[0]?.id || "", amount: "" }]);
     }
   }, [open, editing, projects, categories]);
 
@@ -1918,8 +2004,8 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const splitProfitAmt = amtNum - splitModalAmt;
 
   const submit = () => {
-    if (!amtNum || amtNum <= 0) return;
     if (isEditing) {
+      if (!amtNum || amtNum <= 0) return;
       if (!note || !projectId) return;
       const data = { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amtNum, date, note };
       if (type === "income") {
@@ -1931,6 +2017,19 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       onEditTransaction(editing.id, data);
       onClose(); return;
     }
+    if (type === "expense") {
+      if (!projectId) return;
+      const validItems = items
+        .map((it) => ({ ...it, amt: Number(String(it.amount).replace(/[^0-9]/g, "")) }))
+        .filter((it) => it.amt > 0 && it.category);
+      if (validItems.length === 0) return;
+      validItems.forEach((it) => {
+        const catLabel = categories.find((c) => c.id === it.category)?.label || "";
+        onAddTransaction({ type: "expense", projectId, category: it.category, amount: it.amt, date, note: note || catLabel, fundSource });
+      });
+      onClose(); return;
+    }
+    if (!amtNum || amtNum <= 0) return;
     if (type === "goal") {
       const g = goals.find((x) => x.id === goalId); if (!g) return;
       onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}`, fundSource });
@@ -1941,13 +2040,10 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       onPayDebt(debtId, amtNum);
     } else {
       if (!note || !projectId) return;
-      const tx = { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amtNum, date, note };
-      if (type === "income") {
-        tx.splitModal = splitModalAmt;
-        tx.splitProfit = splitProfitAmt;
-        tx.splitModalPct = modalPctNum;
-      }
-      if (type === "expense") tx.fundSource = fundSource;
+      const tx = { type, projectId, category: categories[0]?.id, amount: amtNum, date, note };
+      tx.splitModal = splitModalAmt;
+      tx.splitProfit = splitProfitAmt;
+      tx.splitModalPct = modalPctNum;
       onAddTransaction(tx);
     }
     onClose();
@@ -1975,7 +2071,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
-          {type === "expense" && (
+          {type === "expense" && isEditing && (
             <Field label="Kategori" C={C}>
               <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -1983,6 +2079,32 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
             </Field>
           )}
         </>
+      )}
+      {type === "expense" && !isEditing && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="block text-xs font-medium" style={{ color: C.textMuted }}>Kategori & Jumlah</span>
+            {items.length > 1 && <span className="text-xs" style={{ color: C.textFaint }}>Total: {fmtIDR(itemsTotal)}</span>}
+          </div>
+          <div className="space-y-2">
+            {items.map((it) => (
+              <div key={it.id} className="flex gap-2 items-center">
+                <select value={it.category} onChange={(e) => updateItem(it.id, "category", e.target.value)} style={{ ...inputStyle(C), flex: "0 0 42%" }}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                <div className="flex-1"><AmountInput value={it.amount} onChange={(v) => updateItem(it.id, "amount", v)} C={C} /></div>
+                {items.length > 1 && (
+                  <button type="button" onClick={() => removeItem(it.id)} className="p-2.5 rounded-lg shrink-0 transition-transform duration-150 hover:scale-105" style={{ background: C.coralSoft, color: C.coral }}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addItem} className="mt-2.5 flex items-center gap-1.5 text-sm font-medium transition-transform duration-150 hover:scale-[1.02]" style={{ color: C.jade }}>
+            <PlusCircle size={14} /> Tambah Kategori Lain
+          </button>
+        </div>
       )}
       {type === "goal" && !isEditing && (
         <Field label="Target Tabungan" C={C}>
@@ -2005,7 +2127,9 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
           )}
         </Field>
       )}
-      <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+      {(type !== "expense" || isEditing) && (
+        <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+      )}
 
       {(type === "expense" || type === "goal" || type === "debt") && (
         <Field label="Sumber Dana" C={C}>
