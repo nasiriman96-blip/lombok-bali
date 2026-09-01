@@ -1792,8 +1792,8 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   // Baris kategori+jumlah untuk pengeluaran multi-kategori (hanya dipakai saat tambah baru, bukan edit)
-  const [items, setItems] = useState([{ id: uid("i"), category: categories[0]?.id || "", amount: "" }]);
-  const addItem = () => setItems((prev) => [...prev, { id: uid("i"), category: categories[0]?.id || "", amount: "" }]);
+  const [items, setItems] = useState([{ id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
+  const addItem = () => setItems((prev) => [...prev, { id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
   const removeItem = (id) => setItems((prev) => (prev.length > 1 ? prev.filter((it) => it.id !== id) : prev));
   const updateItem = (id, field, value) => setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   const itemsTotal = items.reduce((s, it) => s + (Number(String(it.amount).replace(/[^0-9]/g, "")) || 0), 0);
@@ -1808,7 +1808,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       setType("expense"); setProjectId(projects[0]?.id || ""); setCategory(categories[0]?.id || "");
       setAmount(""); setDate(new Date().toISOString().slice(0, 10)); setNote("");
       setPaymentMethod("cash");
-      setItems([{ id: uid("i"), category: categories[0]?.id || "", amount: "" }]);
+      setItems([{ id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
     }
   }, [open, editing, projects, categories]);
 
@@ -1834,7 +1834,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       if (validItems.length === 0) return;
       validItems.forEach((it) => {
         const catLabel = categories.find((c) => c.id === it.category)?.label || "";
-        onAddTransaction({ type: "expense", projectId, category: it.category, amount: it.amt, date, note: note || catLabel });
+        onAddTransaction({ type: "expense", projectId, category: it.category, amount: it.amt, date, note: it.note || note || catLabel });
       });
       onClose(); return;
     }
@@ -1902,18 +1902,21 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
             <span className="block text-xs font-medium" style={{ color: C.textMuted }}>Kategori & Jumlah</span>
             {items.length > 1 && <span className="text-xs" style={{ color: C.textFaint }}>Total: {fmtIDR(itemsTotal)}</span>}
           </div>
-          <div className="space-y-2">
-            {items.map((it) => (
-              <div key={it.id} className="flex gap-2 items-center">
-                <select value={it.category} onChange={(e) => updateItem(it.id, "category", e.target.value)} style={{ ...inputStyle(C), flex: "0 0 42%" }}>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select>
-                <div className="flex-1"><AmountInput value={it.amount} onChange={(v) => updateItem(it.id, "amount", v)} C={C} /></div>
-                {items.length > 1 && (
-                  <button type="button" onClick={() => removeItem(it.id)} className="p-2.5 rounded-lg shrink-0 transition-transform duration-150 hover:scale-105" style={{ background: C.coralSoft, color: C.coral }}>
-                    <Trash2 size={14} />
-                  </button>
-                )}
+          <div className="space-y-2.5">
+            {items.map((it, idx) => (
+              <div key={it.id} className="p-2.5 rounded-xl" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+                <div className="flex gap-2 items-center mb-2">
+                  <select value={it.category} onChange={(e) => updateItem(it.id, "category", e.target.value)} style={{ ...inputStyle(C), flex: "0 0 42%" }}>
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                  <div className="flex-1"><AmountInput value={it.amount} onChange={(v) => updateItem(it.id, "amount", v)} C={C} /></div>
+                  {items.length > 1 && (
+                    <button type="button" onClick={() => removeItem(it.id)} className="p-2.5 rounded-lg shrink-0 transition-transform duration-150 hover:scale-105" style={{ background: C.coralSoft, color: C.coral }}>
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+                <input value={it.note} onChange={(e) => updateItem(it.id, "note", e.target.value)} placeholder={`Catatan (opsional) untuk baris ${idx + 1}`} style={inputStyle(C)} />
               </div>
             ))}
           </div>
@@ -1948,7 +1951,8 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       )}
 
       <Field label="Tanggal" C={C}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} /></Field>
-      {(type === "expense" || type === "income") && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
+      {type === "income" && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
+      {type === "expense" && isEditing && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
       {(type === "goal" || type === "debt") && !isEditing && <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} /></Field>}
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Transaksi"}</button>
     </Modal>
