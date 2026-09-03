@@ -14,7 +14,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, LineChart, Line, Legend
 } from "recharts";
-import { loadAppData, saveAppData, subscribeAppData, getSession, setSession, clearSession } from "./lib/storage";
+import { loadAppData, saveAppData, subscribeAppData, signIn, signOutUser, getActiveUser, subscribeAuth } from "./lib/storage";
 
 const FONT_LINK_ID = "lb-fonts";
 function useFonts() {
@@ -301,13 +301,6 @@ function AmountInput({ value, onChange, C, placeholder = "0" }) {
   );
 }
 
-const ACCOUNTS = [
-  { username: "admin", password: "admin313", role: "admin", displayName: "Admin" },
-  { username: "Risyad", password: "313500", role: "staff", displayName: "Risyad" },
-  { username: "Damah", password: "313500", role: "staff", displayName: "Damah" },
-  { username: "Nasir", password: "313500", role: "staff", displayName: "Nasir" },
-];
-
 function QuickPaymentModal({ open, onClose, C, title, itemName, remaining, confirmLabel = "Simpan", onConfirm }) {
   const [amount, setAmount] = useState("");
   useEffect(() => { if (open) setAmount(""); }, [open]);
@@ -344,16 +337,15 @@ function LoginScreen({ C, onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const submit = () => {
-    const acc = ACCOUNTS.find(
-      (a) => a.username.toLowerCase() === username.trim().toLowerCase() && a.password === password
-    );
-    if (!acc) {
-      setError("Username atau password salah.");
-      return;
-    }
+  const [loading, setLoading] = useState(false);
+  const submit = async () => {
+    if (!username.trim() || !password || loading) return;
+    setLoading(true);
     setError("");
-    onLogin({ name: acc.displayName, role: acc.role });
+    const res = await signIn(username, password);
+    setLoading(false);
+    if (res.error) { setError(res.error); return; }
+    onLogin(res.user);
   };
   return (
     <div style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "Inter, sans-serif" }} className="flex items-center justify-center p-4 relative overflow-hidden">
@@ -386,8 +378,8 @@ function LoginScreen({ C, onLogin }) {
               <AlertTriangle size={13} className="shrink-0" /> {error}
             </div>
           )}
-          <button onClick={submit} disabled={!username.trim() || !password} className="w-full py-3 rounded-lg font-semibold mt-1 transition-all duration-150 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2" style={{ background: username.trim() && password ? C.jade : C.surface2, color: username.trim() && password ? "#08130F" : C.textMuted, boxShadow: username.trim() && password ? C.glow : "none" }}>
-            <Lock size={15} /> Masuk
+          <button onClick={submit} disabled={!username.trim() || !password || loading} className="w-full py-3 rounded-lg font-semibold mt-1 transition-all duration-150 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2" style={{ background: username.trim() && password ? C.jade : C.surface2, color: username.trim() && password ? "#08130F" : C.textMuted, boxShadow: username.trim() && password ? C.glow : "none" }}>
+            <Lock size={15} /> {loading ? "Memeriksa…" : "Masuk"}
           </button>
         </div>
       </div>
@@ -401,9 +393,14 @@ export default function App() {
   const C = isDark ? PALETTE.dark : PALETTE.light;
   const [user, setUser] = useState(null);
   const [userLoaded, setUserLoaded] = useState(false);
-  useEffect(() => { setUser(getSession()); setUserLoaded(true); }, []);
-  const handleLogin = (u) => { setUser(u); setSession(u); };
-  const handleLogout = () => { setUser(null); clearSession(); };
+  useEffect(() => {
+    getActiveUser().then((u) => { setUser(u); setUserLoaded(true); });
+    // Dengarkan perubahan sesi (misal token expired, atau logout dari tab lain)
+    const unsub = subscribeAuth((u) => setUser(u));
+    return unsub;
+  }, []);
+  const handleLogin = (u) => setUser(u);
+  const handleLogout = async () => { await signOutUser(); setUser(null); };
 
   const [projects, setProjects] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -411,6 +408,8 @@ export default function App() {
   const [bills, setBills] = useState([]);
   const [debts, setDebts] = useState([]);
   const [people, setPeople] = useState([]);
+  const [funds, setFunds] = useState([]); // riwayat setor/ambil kantong Modal & Keuntungan (manual)
+  const [items, setItems] = useState([]); // katalog barang per projek: { id, projectId, name, costPrice, sellPrice }
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [activeProject, setActiveProject] = useState("all");
   const [tab, setTab] = useState("dashboard");
@@ -426,6 +425,7 @@ export default function App() {
   const [personModal, setPersonModal] = useState(null);
   const [projModal, setProjModal] = useState(null);
   const [catModal, setCatModal] = useState(false);
+  const [itemModal, setItemModal] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
@@ -439,6 +439,8 @@ export default function App() {
         if (data.bills) setBills(data.bills);
         if (data.debts) setDebts(data.debts);
         if (data.people) setPeople(data.people);
+        if (data.funds) setFunds(data.funds);
+        if (data.items) setItems(data.items);
         if (data.categories) setCategories(hydrateCategories(data.categories));
       }
       setLoaded(true);
@@ -455,6 +457,8 @@ export default function App() {
       if (data.bills) setBills(data.bills);
       if (data.debts) setDebts(data.debts);
       if (data.people) setPeople(data.people);
+      if (data.funds) setFunds(data.funds);
+      if (data.items) setItems(data.items);
       if (data.categories) setCategories(hydrateCategories(data.categories));
       setSyncState("saved");
     });
@@ -469,11 +473,11 @@ export default function App() {
     setSyncState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await saveAppData({ projects, transactions, goals, bills, debts, people, categories });
+      await saveAppData({ projects, transactions, goals, bills, debts, people, funds, items, categories });
       setSyncState("saved");
     }, 600);
     return () => clearTimeout(saveTimer.current);
-  }, [projects, transactions, goals, bills, debts, people, categories, loaded]);
+  }, [projects, transactions, goals, bills, debts, people, funds, items, categories, loaded]);
 
   const FALLBACK_CATEGORY = { id: "unknown", label: "Lainnya", icon: Tag, color: "#9CB0A6" };
   const getCat = (id) => categories.find((c) => c.id === id) || categories[categories.length - 1] || FALLBACK_CATEGORY;
@@ -510,6 +514,22 @@ export default function App() {
     const activeList = scoped.filter((d) => d.paidAmount < d.amount).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     return { total, totalRemaining, activeCount: activeList.length, activeList };
   }, [debts, activeProject]);
+
+  // Saldo kantong Modal/Keuntungan per projek = setoran/ambil manual (funds)
+  // + otomatis dari penjualan barang (splitModal/splitProfit pada transaksi pemasukan)
+  // - otomatis dari pengeluaran yang ditandai sumber dananya (fundSource).
+  const getFundBalance = (projectId, pocket) => {
+    let total = funds.filter((f) => f.projectId === projectId && f.pocket === pocket).reduce((s, f) => s + f.amount, 0);
+    transactions.forEach((t) => {
+      if (t.projectId !== projectId) return;
+      if (t.type === "income") {
+        total += pocket === "modal" ? (t.splitModal || 0) : (t.splitProfit || 0);
+      } else if (t.fundSource === pocket) {
+        total -= t.amount;
+      }
+    });
+    return total;
+  };
 
   const categoryBreakdown = useMemo(() => {
     const map = {};
@@ -618,7 +638,7 @@ export default function App() {
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }} />}
-          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject }} />}
+          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject, funds, setFunds, getFundBalance, items, setItems, setItemModal }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
         </main>
       </div>
@@ -627,7 +647,7 @@ export default function App() {
       </button>
       <AddTransactionModal
         open={!!txModal} editing={txModal && txModal !== "new" ? txModal : null} onClose={() => setTxModal(null)}
-        C={C} projects={projects} goals={goals} debts={debts} categories={categories}
+        C={C} projects={projects} goals={goals} debts={debts} categories={categories} productItems={items}
         onAddTransaction={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])}
         onEditTransaction={(id, data) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)))}
         onContributeGoal={(goalId, amt) => setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, current: g.current + amt } : g)))}
@@ -638,6 +658,7 @@ export default function App() {
       <AddBillModal open={!!billModal} editing={billModal && billModal !== "new" ? billModal : null} onClose={() => setBillModal(null)} C={C} projects={projects} categories={categories} onSave={(data) => { if (data.id) setBills((prev) => prev.map((b) => (b.id === data.id ? { ...b, ...data } : b))); else setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...data }, ...prev]); }} />
       <AddDebtModal open={!!debtModal} editing={debtModal && debtModal !== "new" ? debtModal : null} onClose={() => setDebtModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setDebts((prev) => prev.map((d) => (d.id === data.id ? { ...d, ...data } : d))); else setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...data }, ...prev]); }} />
       <AddPersonModal open={!!personModal} editing={personModal && personModal !== "new" ? personModal : null} onClose={() => setPersonModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setPeople((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setPeople((prev) => [{ id: uid("ah"), ...data }, ...prev]); }} />
+      <AddItemModal open={!!itemModal} editing={itemModal && itemModal !== "new" ? itemModal : null} onClose={() => setItemModal(null)} C={C} projects={projects} activeProject={activeProject} onSave={(data) => { if (data.id) setItems((prev) => prev.map((it) => (it.id === data.id ? { ...it, ...data } : it))); else setItems((prev) => [{ id: uid("it"), ...data }, ...prev]); }} />
       <AddProjectModal open={!!projModal} editing={projModal && projModal !== "new" ? projModal : null} onClose={() => setProjModal(null)} C={C} onSave={(data) => { if (data.id) setProjects((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...data }]); }} />
     </div>
   );
@@ -1011,10 +1032,12 @@ function KeuanganView(props) {
   const [subTab, setSubTab] = useState("transactions");
   const SUBTABS = [
     { id: "transactions", label: "Transaksi", icon: Receipt },
+    { id: "items", label: "Barang", icon: Package },
     { id: "budget", label: "Anggaran", icon: Wallet },
     { id: "savings", label: "Tabungan", icon: PiggyBank },
     { id: "bills", label: "Tagihan", icon: Bell },
     { id: "debts", label: "Hutang", icon: HandCoins },
+    { id: "funds", label: "Modal & Untung", icon: Landmark },
     { id: "analytics", label: "Analitik", icon: BarChart3 },
     { id: "laporan", label: "Laporan", icon: Share2 },
   ];
@@ -1037,10 +1060,12 @@ function KeuanganView(props) {
         })}
       </div>
       {subTab === "transactions" && <TransactionsView {...props} />}
+      {subTab === "items" && <ItemsView {...props} />}
       {subTab === "budget" && <BudgetView {...props} />}
       {subTab === "savings" && <SavingsView {...props} />}
       {subTab === "bills" && <BillsView {...props} />}
       {subTab === "debts" && <DebtsView {...props} />}
+      {subTab === "funds" && <FundsView {...props} />}
       {subTab === "analytics" && <AnalyticsView {...props} />}
       {subTab === "laporan" && <LaporanView {...props} />}
     </div>
@@ -1282,6 +1307,21 @@ function TransactionsView({ C, transactions, projects, activeProject, projectNam
                   <span>{fmtDate(t.date)}</span>
                   <span>·</span>
                   <span>{t.type === "expense" ? cat.label : "Pemasukan"}</span>
+                  {t.type === "income" && t.splitModal > 0 && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${C.blue}22`, color: C.blue }}>
+                      Modal {fmtIDR(t.splitModal)}
+                    </span>
+                  )}
+                  {t.type === "income" && t.splitProfit != null && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: C.jadeSoft, color: C.jade }}>
+                      Untung {fmtIDR(t.splitProfit)}
+                    </span>
+                  )}
+                  {t.type === "expense" && t.fundSource && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={t.fundSource === "modal" ? { background: `${C.blue}22`, color: C.blue } : { background: C.jadeSoft, color: C.jade }}>
+                      Dari {t.fundSource === "modal" ? "Modal" : "Keuntungan"}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: t.type === "income" ? C.jade : C.text }}>
@@ -1571,6 +1611,200 @@ function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, is
   );
 }
 
+/* ---------------------------------------------------------------
+   MODAL & KEUNTUNGAN — dua kantong terpisah per projek, murni
+   diisi/dikurangi manual oleh pengguna, TIDAK otomatis dari transaksi.
+----------------------------------------------------------------*/
+function FundAdjustModal({ open, onClose, C, pocket, projectName, onConfirm }) {
+  const [mode, setMode] = useState("in"); // "in" = setor, "out" = ambil
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => { if (open) { setMode("in"); setAmount(""); setNote(""); } }, [open]);
+
+  const submit = () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return;
+    onConfirm(mode === "in" ? amt : -amt, note);
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`${pocket === "modal" ? "Modal" : "Keuntungan"} — ${projectName || ""}`} C={C}>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <button type="button" onClick={() => setMode("in")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+          style={{ background: mode === "in" ? C.jadeSoft : C.surface2, color: mode === "in" ? C.jade : C.textMuted, border: `1px solid ${mode === "in" ? C.jade : C.border}` }}>
+          + Setor
+        </button>
+        <button type="button" onClick={() => setMode("out")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+          style={{ background: mode === "out" ? C.coralSoft : C.surface2, color: mode === "out" ? C.coral : C.textMuted, border: `1px solid ${mode === "out" ? C.coral : C.border}` }}>
+          − Ambil
+        </button>
+      </div>
+      <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+      <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Suntikan modal awal" style={inputStyle(C)} /></Field>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan</button>
+    </Modal>
+  );
+}
+
+function ItemsView({ C, items, setItems, projects, projectName, isAdmin, activeProject, setItemModal }) {
+  const shown = activeProject === "all" ? items : items.filter((it) => it.projectId === activeProject);
+  return (
+    <div className="space-y-5 lb-anim">
+      <ViewHeader C={C} title="Barang" subtitle="Katalog harga modal & harga jual per barang, untuk hitung otomatis modal/untung saat terjual" action={isAdmin ? { label: "Tambah Barang", onClick: () => setItemModal("new") } : null} />
+      {shown.length === 0 && <div className="text-sm" style={{ color: C.textFaint }}>Belum ada barang. {isAdmin ? "Tambahkan dulu supaya bisa dipilih saat mencatat pemasukan penjualan." : ""}</div>}
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {shown.map((it) => {
+          const margin = it.sellPrice - it.costPrice;
+          const marginPct = it.sellPrice ? (margin / it.sellPrice) * 100 : 0;
+          return (
+            <Card key={it.id} C={C}>
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{it.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(it.projectId)}</div>
+                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => setItemModal(it)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>
+                    <button onClick={() => { if (confirm(`Hapus barang "${it.name}"?`)) setItems((prev) => prev.filter((x) => x.id !== it.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                <div>
+                  <div style={{ color: C.textFaint }}>Harga Modal</div>
+                  <div className="font-semibold" style={{ color: C.blue, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(it.costPrice)}</div>
+                </div>
+                <div>
+                  <div style={{ color: C.textFaint }}>Harga Jual</div>
+                  <div className="font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(it.sellPrice)}</div>
+                </div>
+              </div>
+              <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}`, color: C.textFaint }}>
+                <span>Untung / item</span>
+                <span className="font-semibold" style={{ color: margin >= 0 ? C.jade : C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(margin)} ({marginPct.toFixed(0)}%)</span>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AddItemModal({ open, onClose, C, projects, activeProject, editing, onSave }) {
+  const [name, setName] = useState("");
+  const [projectId, setProjectId] = useState(activeProject !== "all" ? activeProject : (projects[0]?.id || ""));
+  const [costPrice, setCostPrice] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
+  const isEditing = !!editing;
+  useEffect(() => {
+    if (open && editing) {
+      setName(editing.name); setProjectId(editing.projectId);
+      setCostPrice(String(editing.costPrice)); setSellPrice(String(editing.sellPrice));
+    } else if (open && !editing) {
+      setName(""); setProjectId(activeProject !== "all" ? activeProject : (projects[0]?.id || ""));
+      setCostPrice(""); setSellPrice("");
+    }
+  }, [open, editing]);
+  const submit = () => {
+    const cp = Number(String(costPrice).replace(/[^0-9]/g, ""));
+    const sp = Number(String(sellPrice).replace(/[^0-9]/g, ""));
+    if (!name || !projectId || sp <= 0) return;
+    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, costPrice: cp, sellPrice: sp });
+    onClose();
+  };
+  return (
+    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Barang" : "Barang Baru"} C={C}>
+      <Field label="Nama Barang" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Es Teh Manis" style={inputStyle(C)} /></Field>
+      <Field label="Projek" C={C}>
+        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Harga Modal (Rp)" C={C}><AmountInput value={costPrice} onChange={setCostPrice} C={C} /></Field>
+      <Field label="Harga Jual (Rp)" C={C}><AmountInput value={sellPrice} onChange={setSellPrice} C={C} /></Field>
+      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Barang"}</button>
+    </Modal>
+  );
+}
+
+function FundsView({ C, projects, funds, setFunds, getFundBalance, activeProject, projectName, isAdmin }) {
+  const [adjustTarget, setAdjustTarget] = useState(null); // { projectId, pocket }
+  const shownProjects = activeProject === "all" ? projects : projects.filter((p) => p.id === activeProject);
+
+  const confirmAdjust = (signedAmount, note) => {
+    if (!adjustTarget) return;
+    setFunds((prev) => [{ id: uid("f"), projectId: adjustTarget.projectId, pocket: adjustTarget.pocket, amount: signedAmount, note, date: new Date().toISOString().slice(0, 10) }, ...prev]);
+  };
+
+  const history = useMemo(() => {
+    const scoped = activeProject === "all" ? funds : funds.filter((f) => f.projectId === activeProject);
+    return [...scoped].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
+  }, [funds, activeProject]);
+
+  return (
+    <div className="space-y-5 lb-anim">
+      <ViewHeader C={C} title="Modal & Keuntungan" subtitle="Otomatis dari penjualan barang & pengeluaran, plus bisa disetor/diambil manual" />
+      {shownProjects.length === 0 && <div className="text-sm" style={{ color: C.textFaint }}>Belum ada data projek.</div>}
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {shownProjects.map((p) => {
+          const modalBal = getFundBalance(p.id, "modal");
+          const profitBal = getFundBalance(p.id, "keuntungan");
+          return (
+            <Card key={p.id} C={C}>
+              <div className="font-semibold mb-3" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{p.name}</div>
+              {[{ pocket: "modal", label: "Modal", balance: modalBal, color: C.blue, bg: `${C.blue}22` }, { pocket: "keuntungan", label: "Keuntungan", balance: profitBal, color: C.jade, bg: C.jadeSoft }].map((row) => (
+                <div key={row.pocket} className="flex items-center justify-between p-3 rounded-xl mb-2" style={{ background: row.bg }}>
+                  <div>
+                    <div className="text-xs mb-0.5" style={{ color: row.color }}>{row.label}</div>
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(row.balance)}</div>
+                  </div>
+                  {isAdmin && (
+                    <button onClick={() => setAdjustTarget({ projectId: p.id, pocket: row.pocket })} className="p-2 rounded-lg transition-transform duration-150 hover:scale-105" style={{ background: C.surface2, color: row.color }} title="Setor / Ambil">
+                      <PlusCircle size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </Card>
+          );
+        })}
+      </div>
+      <Card C={C} pad="p-0">
+        <div className="px-5 pt-5 pb-3">
+          <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Riwayat Setor/Ambil</h3>
+        </div>
+        {history.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textFaint }}>Belum ada riwayat.</div>}
+        {history.map((f, i) => (
+          <div key={f.id} className="flex items-center gap-3 px-5 py-3" style={{ borderTop: i === 0 ? "none" : `1px solid ${C.borderSoft}` }}>
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: f.pocket === "modal" ? `${C.blue}22` : C.jadeSoft }}>
+              <Landmark size={15} color={f.pocket === "modal" ? C.blue : C.jade} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium truncate" style={{ color: C.text }}>{f.note || (f.pocket === "modal" ? "Modal" : "Keuntungan")}</div>
+              <div className="text-xs" style={{ color: C.textMuted }}>{projectName(f.projectId)} · {f.pocket === "modal" ? "Modal" : "Keuntungan"} · {fmtDate(f.date)}</div>
+            </div>
+            <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: f.amount >= 0 ? C.jade : C.coral }}>
+              {f.amount >= 0 ? "+" : ""}{fmtIDR(f.amount)}
+            </div>
+          </div>
+        ))}
+      </Card>
+      <FundAdjustModal
+        open={!!adjustTarget}
+        onClose={() => setAdjustTarget(null)}
+        C={C}
+        pocket={adjustTarget?.pocket}
+        projectName={adjustTarget ? projects.find((p) => p.id === adjustTarget.projectId)?.name : ""}
+        onConfirm={confirmAdjust}
+      />
+    </div>
+  );
+}
+
 const PEOPLE_CATEGORIES = [{ id: "staff-l", label: "Staff Laki-laki" }, { id: "staff-p", label: "Staff Perempuan" }, { id: "anak", label: "Anak" }];
 const peopleCatLabel = (id) => PEOPLE_CATEGORIES.find((c) => c.id === id)?.label || id;
 
@@ -1781,7 +2015,7 @@ function ManageCategoriesModal({ open, onClose, C, categories, setCategories }) 
   );
 }
 
-function AddTransactionModal({ open, onClose, C, projects, goals, debts, categories, editing, onAddTransaction, onEditTransaction, onContributeGoal, onPayDebt }) {
+function AddTransactionModal({ open, onClose, C, projects, goals, debts, categories, productItems, editing, onAddTransaction, onEditTransaction, onContributeGoal, onPayDebt }) {
   const [type, setType] = useState("expense");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [category, setCategory] = useState(categories[0]?.id || "");
@@ -1791,6 +2025,7 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const [goalId, setGoalId] = useState(goals[0]?.id || "");
   const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [fundSource, setFundSource] = useState("keuntungan"); // sumber dana pengeluaran: "modal" atau "keuntungan"
   // Baris kategori+jumlah untuk pengeluaran multi-kategori (hanya dipakai saat tambah baru, bukan edit)
   const [items, setItems] = useState([{ id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
   const addItem = () => setItems((prev) => [...prev, { id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
@@ -1799,16 +2034,30 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
   const itemsTotal = items.reduce((s, it) => s + (Number(String(it.amount).replace(/[^0-9]/g, "")) || 0), 0);
   const isEditing = !!editing;
 
+  // Pemasukan lewat penjualan barang: baris {itemId, qty}
+  const [incomeMode, setIncomeMode] = useState("manual"); // "manual" | "items"
+  const [saleRows, setSaleRows] = useState([{ id: uid("s"), itemId: "", qty: "1" }]);
+  const addSaleRow = () => setSaleRows((prev) => [...prev, { id: uid("s"), itemId: "", qty: "1" }]);
+  const removeSaleRow = (id) => setSaleRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  const updateSaleRow = (id, field, value) => setSaleRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  const projectItems = (productItems || []).filter((it) => it.projectId === projectId);
+
   useEffect(() => {
     if (open && editing) {
       setType(editing.type); setProjectId(editing.projectId); setCategory(editing.category);
       setAmount(String(editing.amount)); setDate(editing.date); setNote(editing.note);
       setPaymentMethod(editing.paymentMethod === "online" ? "online" : "cash");
+      setFundSource(editing.fundSource === "modal" ? "modal" : "keuntungan");
     } else if (open && !editing) {
       setType("expense"); setProjectId(projects[0]?.id || ""); setCategory(categories[0]?.id || "");
       setAmount(""); setDate(new Date().toISOString().slice(0, 10)); setNote("");
       setPaymentMethod("cash");
+      setFundSource("keuntungan");
       setItems([{ id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
+      const pid = projects[0]?.id || "";
+      const hasItems = (productItems || []).some((it) => it.projectId === pid);
+      setIncomeMode(hasItems ? "items" : "manual");
+      setSaleRows([{ id: uid("s"), itemId: (productItems || []).find((it) => it.projectId === pid)?.id || "", qty: "1" }]);
     }
   }, [open, editing, projects, categories]);
 
@@ -1817,12 +2066,29 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
 
   const amtNum = Number(String(amount).replace(/[^0-9]/g, ''));
 
+  // Total hitungan penjualan barang
+  const saleCalc = saleRows.reduce((acc, r) => {
+    const item = (productItems || []).find((it) => it.id === r.itemId);
+    const qty = Number(r.qty) || 0;
+    if (!item || qty <= 0) return acc;
+    return { revenue: acc.revenue + qty * item.sellPrice, modal: acc.modal + qty * item.costPrice, count: acc.count + 1 };
+  }, { revenue: 0, modal: 0, count: 0 });
+  const saleProfit = saleCalc.revenue - saleCalc.modal;
+
   const submit = () => {
     if (isEditing) {
       if (!amtNum || amtNum <= 0) return;
       if (!note || !projectId) return;
       const data = { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amtNum, date, note };
-      if (type === "income") data.paymentMethod = paymentMethod;
+      if (type === "income") {
+        data.paymentMethod = paymentMethod;
+        const origModal = editing.splitModal || 0;
+        const origAmt = editing.amount || 1;
+        const ratio = origModal / origAmt;
+        data.splitModal = Math.round(amtNum * ratio);
+        data.splitProfit = amtNum - data.splitModal;
+      }
+      if (type === "expense") data.fundSource = fundSource;
       onEditTransaction(editing.id, data);
       onClose(); return;
     }
@@ -1834,22 +2100,34 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
       if (validItems.length === 0) return;
       validItems.forEach((it) => {
         const catLabel = categories.find((c) => c.id === it.category)?.label || "";
-        onAddTransaction({ type: "expense", projectId, category: it.category, amount: it.amt, date, note: it.note || note || catLabel });
+        onAddTransaction({ type: "expense", projectId, category: it.category, amount: it.amt, date, note: it.note || note || catLabel, fundSource });
       });
+      onClose(); return;
+    }
+    if (type === "income") {
+      if (!projectId) return;
+      if (incomeMode === "items") {
+        if (saleCalc.count === 0) return;
+        const autoNote = saleRows
+          .filter((r) => r.itemId && Number(r.qty) > 0)
+          .map((r) => { const it = (productItems || []).find((x) => x.id === r.itemId); return it ? `${r.qty}x ${it.name}` : null; })
+          .filter(Boolean).join(", ");
+        onAddTransaction({ type: "income", projectId, category: categories[0]?.id, amount: saleCalc.revenue, date, note: note || autoNote, paymentMethod, splitModal: saleCalc.modal, splitProfit: saleProfit });
+      } else {
+        if (!amtNum || amtNum <= 0 || !note) return;
+        onAddTransaction({ type: "income", projectId, category: categories[0]?.id, amount: amtNum, date, note, paymentMethod, splitModal: 0, splitProfit: amtNum });
+      }
       onClose(); return;
     }
     if (!amtNum || amtNum <= 0) return;
     if (type === "goal") {
       const g = goals.find((x) => x.id === goalId); if (!g) return;
-      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}` });
+      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}`, fundSource });
       onContributeGoal(goalId, amtNum);
     } else if (type === "debt") {
       const d = (debts || []).find((x) => x.id === debtId); if (!d) return;
-      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amtNum, date, note: note || `Cicilan hutang: ${d.name}` });
+      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amtNum, date, note: note || `Cicilan hutang: ${d.name}`, fundSource });
       onPayDebt(debtId, amtNum);
-    } else {
-      if (!note || !projectId) return;
-      onAddTransaction({ type, projectId, category: categories[0]?.id, amount: amtNum, date, note, paymentMethod });
     }
     onClose();
   };
@@ -1881,20 +2159,91 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
             </Field>
           )}
           {type === "income" && (
-            <Field label="Metode Pembayaran" C={C}>
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setPaymentMethod("cash")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-                  style={{ background: paymentMethod === "cash" ? C.jadeSoft : C.surface2, color: paymentMethod === "cash" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "cash" ? C.jade : C.border}` }}>
-                  Cash
-                </button>
-                <button type="button" onClick={() => setPaymentMethod("online")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-                  style={{ background: paymentMethod === "online" ? C.jadeSoft : C.surface2, color: paymentMethod === "online" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "online" ? C.jade : C.border}` }}>
-                  Online
-                </button>
-              </div>
-            </Field>
+            <>
+              <Field label="Metode Pembayaran" C={C}>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setPaymentMethod("cash")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+                    style={{ background: paymentMethod === "cash" ? C.jadeSoft : C.surface2, color: paymentMethod === "cash" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "cash" ? C.jade : C.border}` }}>
+                    Cash
+                  </button>
+                  <button type="button" onClick={() => setPaymentMethod("online")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+                    style={{ background: paymentMethod === "online" ? C.jadeSoft : C.surface2, color: paymentMethod === "online" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "online" ? C.jade : C.border}` }}>
+                    Online
+                  </button>
+                </div>
+              </Field>
+              {!isEditing && projectItems.length > 0 && (
+                <Field label="Sumber Pemasukan" C={C}>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setIncomeMode("items")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+                      style={{ background: incomeMode === "items" ? C.jadeSoft : C.surface2, color: incomeMode === "items" ? C.jade : C.textMuted, border: `1px solid ${incomeMode === "items" ? C.jade : C.border}` }}>
+                      Jual Barang
+                    </button>
+                    <button type="button" onClick={() => setIncomeMode("manual")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+                      style={{ background: incomeMode === "manual" ? C.jadeSoft : C.surface2, color: incomeMode === "manual" ? C.jade : C.textMuted, border: `1px solid ${incomeMode === "manual" ? C.jade : C.border}` }}>
+                      Manual
+                    </button>
+                  </div>
+                </Field>
+              )}
+              {!isEditing && incomeMode === "items" && projectItems.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="block text-xs font-medium" style={{ color: C.textMuted }}>Barang Terjual</span>
+                  </div>
+                  <div className="space-y-2">
+                    {saleRows.map((r) => {
+                      const it = projectItems.find((x) => x.id === r.itemId);
+                      return (
+                        <div key={r.id} className="p-2.5 rounded-xl" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
+                          <div className="flex gap-2 items-center">
+                            <select value={r.itemId} onChange={(e) => updateSaleRow(r.id, "itemId", e.target.value)} style={{ ...inputStyle(C), flex: "1 1 auto" }}>
+                              <option value="">Pilih barang</option>
+                              {projectItems.map((pi) => <option key={pi.id} value={pi.id}>{pi.name} ({fmtIDR(pi.sellPrice)})</option>)}
+                            </select>
+                            <input type="number" min="1" value={r.qty} onChange={(e) => updateSaleRow(r.id, "qty", e.target.value)} style={{ ...inputStyle(C), width: 64, textAlign: "center" }} />
+                            {saleRows.length > 1 && (
+                              <button type="button" onClick={() => removeSaleRow(r.id)} className="p-2.5 rounded-lg shrink-0 transition-transform duration-150 hover:scale-105" style={{ background: C.coralSoft, color: C.coral }}>
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                          {it && Number(r.qty) > 0 && (
+                            <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>= {fmtIDR(it.sellPrice * Number(r.qty))} (modal {fmtIDR(it.costPrice * Number(r.qty))})</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button type="button" onClick={addSaleRow} className="mt-2.5 flex items-center gap-1.5 text-sm font-medium transition-transform duration-150 hover:scale-[1.02]" style={{ color: C.jade }}>
+                    <PlusCircle size={14} /> Tambah Barang Lain
+                  </button>
+                  {saleCalc.count > 0 && (
+                    <div className="mt-3 p-3 rounded-xl grid grid-cols-3 gap-2 text-center" style={{ background: C.surface2 }}>
+                      <div><div className="text-[10px]" style={{ color: C.textFaint }}>Total</div><div className="text-xs font-semibold" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(saleCalc.revenue)}</div></div>
+                      <div><div className="text-[10px]" style={{ color: C.textFaint }}>Modal</div><div className="text-xs font-semibold" style={{ color: C.blue, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(saleCalc.modal)}</div></div>
+                      <div><div className="text-[10px]" style={{ color: C.textFaint }}>Untung</div><div className="text-xs font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(saleProfit)}</div></div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </>
+      )}
+      {(type === "expense" || type === "goal" || type === "debt") && (
+        <Field label="Sumber Dana" C={C}>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setFundSource("keuntungan")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              style={{ background: fundSource === "keuntungan" ? C.jadeSoft : C.surface2, color: fundSource === "keuntungan" ? C.jade : C.textMuted, border: `1px solid ${fundSource === "keuntungan" ? C.jade : C.border}` }}>
+              Keuntungan
+            </button>
+            <button type="button" onClick={() => setFundSource("modal")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
+              style={{ background: fundSource === "modal" ? `${C.blue}22` : C.surface2, color: fundSource === "modal" ? C.blue : C.textMuted, border: `1px solid ${fundSource === "modal" ? C.blue : C.border}` }}>
+              Modal
+            </button>
+          </div>
+        </Field>
       )}
       {type === "expense" && !isEditing && (
         <div className="mb-3">
@@ -1946,12 +2295,12 @@ function AddTransactionModal({ open, onClose, C, projects, goals, debts, categor
           )}
         </Field>
       )}
-      {(type !== "expense" || isEditing) && (
+      {(type !== "expense" || isEditing) && !(type === "income" && incomeMode === "items" && !isEditing && projectItems.length > 0) && (
         <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
       )}
 
       <Field label="Tanggal" C={C}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} /></Field>
-      {type === "income" && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
+      {type === "income" && <Field label={incomeMode === "items" && !isEditing ? "Catatan (opsional, otomatis terisi)" : "Catatan"} C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
       {type === "expense" && isEditing && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
       {(type === "goal" || type === "debt") && !isEditing && <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} /></Field>}
       <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Transaksi"}</button>
