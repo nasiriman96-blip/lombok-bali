@@ -1,343 +1,609 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
+import React, { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef } from "react";
 import {
-  LayoutDashboard, Building2, Receipt, PiggyBank, Bell, BarChart3,
-  Plus, Moon, Sun, Cloud, CloudOff, X, TrendingUp, TrendingDown,
-  Wallet, Calendar, MapPin, Trash2, AlertTriangle, CheckCircle2,
-  Wrench, Zap, Users, Megaphone, Package, FileText, ShoppingBag,
-  MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
-  Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
-  CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete, Cake, Share2, ShoppingCart, Minus, Check
-} from "lucide-react";
-import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, LineChart, Line, Legend
+  LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from "recharts";
+import {
+  LayoutDashboard, Store, ShoppingCart, Receipt, HandCoins, History as HistoryIcon,
+  FileBarChart, Package, Settings as SettingsIcon, Plus, Sun, Moon, Menu, X, Search,
+  Download, Printer, Send, TrendingUp, TrendingDown, Wallet, PiggyBank, CheckCircle2,
+  AlertCircle, Circle, Edit2, Trash2, Building2, Phone,
+  MapPin, CreditCard, Banknote, Smartphone, QrCode, ArrowUpRight, ArrowDownRight,
+  Boxes, ClipboardList, LogOut, ShieldCheck, UserCircle2, Sparkles,
+  AlertTriangle, ImagePlus, Lock
+} from "lucide-react";
 import { loadAppData, saveAppData, subscribeAppData, signIn, signOutUser, getActiveUser, subscribeAuth } from "./lib/storage";
 
-const FONT_LINK_ID = "lb-fonts";
-function useFonts() {
-  useEffect(() => {
-    if (document.getElementById(FONT_LINK_ID)) return;
-    const link = document.createElement("link");
-    link.id = FONT_LINK_ID;
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap";
-    document.head.appendChild(link);
-  }, []);
-}
+/* ======================================================================
+   TOKO FINANCE — multi-store finance management
+   Single-file React app. Persists via window.storage (personal, per-user).
+   ====================================================================== */
 
-const PALETTE = {
-  dark: {
-    bg: "#0A1412", bgSoft: "#0D1A17", surface: "#11201C", surface2: "#172620",
-    border: "#233C33", borderSoft: "#1B2E27", text: "#F2EFE6", textMuted: "#8FA69A",
-    textFaint: "#5E7A6E", jade: "#34D8A3", jadeSoft: "rgba(52,216,163,0.12)",
-    gold: "#E0B15C", goldSoft: "rgba(224,177,92,0.14)", coral: "#F0725A",
-    coralSoft: "rgba(240,114,90,0.14)", blue: "#6FB3D9",
-    shadow: "0 1px 2px rgba(0,0,0,0.24), 0 8px 24px -8px rgba(0,0,0,0.45)",
-    shadowLg: "0 4px 12px rgba(0,0,0,0.28), 0 20px 48px -16px rgba(0,0,0,0.55)",
-    glow: "0 0 0 1px rgba(52,216,163,0.16), 0 8px 28px -6px rgba(52,216,163,0.22)",
-  },
-  light: {
-    bg: "#F6F4EC", bgSoft: "#EFEBDF", surface: "#FFFFFF", surface2: "#FBF9F2",
-    border: "#E3DFCF", borderSoft: "#ECE8DA", text: "#182420", textMuted: "#5C6E64",
-    textFaint: "#8A9A90", jade: "#1E9E75", jadeSoft: "rgba(30,158,117,0.10)",
-    gold: "#B4842E", goldSoft: "rgba(180,132,46,0.12)", coral: "#D6533B",
-    coralSoft: "rgba(214,83,59,0.10)", blue: "#3E7FA8",
-    shadow: "0 1px 2px rgba(24,36,32,0.04), 0 8px 20px -10px rgba(24,36,32,0.10)",
-    shadowLg: "0 4px 12px rgba(24,36,32,0.05), 0 20px 40px -18px rgba(24,36,32,0.16)",
-    glow: "0 0 0 1px rgba(30,158,117,0.12), 0 8px 24px -8px rgba(30,158,117,0.18)",
-  },
+const STORAGE_KEY = "tokofinance:db:v1";
+
+const FONT_STYLE = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+:root { --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif; --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+.font-display { font-family: var(--font-display); letter-spacing: -0.01em; }
+.font-body { font-family: var(--font-body); }
+.tabular { font-variant-numeric: tabular-nums; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fadeUp { animation: fadeUp .35s ease-out both; }
+@keyframes scaleIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
+.animate-scaleIn { animation: scaleIn .2s ease-out both; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,.4); border-radius: 8px; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+`;
+
+/* ---------------------------- helpers ---------------------------- */
+const uid = (p = "id") => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
+const fmtIDR = (n) =>
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(
+    Math.round(n || 0)
+  );
+
+const fmtIDRshort = (n) => {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return (v / 1e9).toFixed(1).replace(/\.0$/, "") + " M";
+  if (abs >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, "") + " Jt";
+  if (abs >= 1e3) return (v / 1e3).toFixed(0) + " Rb";
+  return String(v);
 };
 
-const PROJECT_COLORS = ["#34D8A3", "#E0B15C", "#6FB3D9", "#F0725A", "#C98BD9", "#8FA69A"];
+const fmtDate = (d, opts = {}) =>
+  new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", ...opts });
 
-const DEFAULT_CATEGORIES = [
-  { id: "pdam", label: "PDAM", icon: Droplet, color: "#6FB3D9", default: true },
-  { id: "listrik", label: "Listrik", icon: Zap, color: "#C98BD9", default: true },
-  { id: "belanja", label: "Belanja", icon: ShoppingBag, color: "#34D8A3", default: true },
-  { id: "sewa-rumah", label: "Sewa Rumah", icon: Home, color: "#F0725A", default: true },
-  { id: "tabungan", label: "Tabungan", icon: PiggyBank, color: "#5FA8D3", default: true },
+const fmtDateTime = (d) =>
+  new Date(d).toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+
+function periodRange(period, custom) {
+  const now = new Date();
+  switch (period) {
+    case "today": return [startOfDay(now), endOfDay(now)];
+    case "yesterday": { const y = addDays(now, -1); return [startOfDay(y), endOfDay(y)]; }
+    case "week": { const start = addDays(now, -(now.getDay() === 0 ? 6 : now.getDay() - 1)); return [startOfDay(start), endOfDay(now)]; }
+    case "month": { const start = new Date(now.getFullYear(), now.getMonth(), 1); return [startOfDay(start), endOfDay(now)]; }
+    case "year": { const start = new Date(now.getFullYear(), 0, 1); return [startOfDay(start), endOfDay(now)]; }
+    case "custom": return [startOfDay(custom?.from || now), endOfDay(custom?.to || now)];
+    default: return [startOfDay(now), endOfDay(now)];
+  }
+}
+
+function inRange(dateStr, range) {
+  const t = new Date(dateStr).getTime();
+  return t >= range[0].getTime() && t <= range[1].getTime();
+}
+
+const PAYMENT_METHODS = [
+  { id: "cash", label: "Cash", icon: Banknote, color: "#16A34A" },
+  { id: "transfer", label: "Transfer", icon: Landmark2, color: "#2563EB" },
+  { id: "qris", label: "QRIS", icon: QrCode, color: "#7C3AED" },
+  { id: "ewallet", label: "E-Wallet", icon: Smartphone, color: "#EA580C" },
+  { id: "debit", label: "Debit", icon: CreditCard, color: "#0891B2" },
+  { id: "kredit", label: "Kredit", icon: CreditCard, color: "#DB2777" },
+];
+function Landmark2(props) { return <Building2 {...props} />; }
+
+const EXPENSE_CATEGORIES = [
+  "Belanja barang", "Bahan baku", "Gaji", "Listrik", "Air", "Internet",
+  "Transportasi", "Sewa", "Perawatan", "Operasional", "Marketing", "Lainnya",
 ];
 
-const isValidIcon = (icon) =>
-  typeof icon === "function" || (icon && typeof icon === "object" && !!icon.$$typeof);
+const HANDOVER_TYPES = ["Serahan keuntungan", "Setoran kas", "Setoran pemilik", "Lainnya"];
 
-const hydrateCategories = (loaded) => {
-  if (!Array.isArray(loaded) || loaded.length === 0) return DEFAULT_CATEGORIES;
-  return loaded.map((c) => {
-    const def = DEFAULT_CATEGORIES.find((d) => d.id === c.id);
-    if (def) return { ...c, icon: def.icon };
-    return { ...c, icon: isValidIcon(c.icon) ? c.icon : Tag };
-  });
-};
+const ROLES = [
+  { id: "super_admin", label: "Super Admin", icon: ShieldCheck, desc: "Akses penuh semua toko & sistem" },
+  { id: "owner", label: "Owner", icon: UserCircle2, desc: "Lihat semua toko, keuntungan & serahan" },
+  { id: "manager", label: "Manager", icon: UserCircle2, desc: "Kelola toko tertentu" },
+  { id: "kasir", label: "Kasir", icon: UserCircle2, desc: "Input penjualan toko sendiri" },
+];
 
-const fmtIDR = (n) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n || 0);
-const fmtDate = (s) => new Date(s + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+const BRAND = { indigo: "#4F46E5", indigoSoft: "#EEF2FF" };
+const CHART_COLORS = ["#4F46E5", "#F59E0B", "#0EA5E9", "#DB2777", "#16A34A", "#7C3AED"];
 
-const daysUntilBirthday = (birthDateStr) => {
-  if (!birthDateStr) return null;
-  const today = new Date(new Date().toDateString());
-  const birth = new Date(birthDateStr + "T00:00:00");
-  let next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
-  if (next < today) next = new Date(today.getFullYear() + 1, birth.getMonth(), birth.getDate());
-  const days = Math.round((next - today) / 86400000);
-  const nextAge = next.getFullYear() - birth.getFullYear();
-  return { days, nextAge, date: next };
-};
-
-const monthKey = (s) => s.slice(0, 7);
-const monthLabel = (key) => {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
-};
-
-const uid = (p) => p + Math.random().toString(36).slice(2, 9);
-
-function ContourLines({ color = "#34D8A3", opacity = 0.14, className = "" }) {
-  const paths = [
-    "M-20,120 C 80,60 160,180 260,100 S 420,40 520,110",
-    "M-20,160 C 90,100 170,220 270,140 S 430,80 520,150",
-    "M-20,200 C 100,140 180,260 280,180 S 440,120 520,190",
-    "M-20,240 C 110,180 190,300 290,220 S 450,160 520,230",
-    "M-20,40 C 70,10 150,110 250,50 S 410,-10 520,50",
+/* ---------------------------- demo data ---------------------------- */
+function genDemoData() {
+  const stores = [
+    { id: "st_a", name: "Toko A - Kopi Senja", address: "Jl. Merdeka No. 12, Bandung", whatsapp: "6281234560001", owner: "Budi Santoso", pic: "Rani", initialBalance: 5000000, initialCapital: 20000000, status: "active", logoColor: "#4F46E5" },
+    { id: "st_b", name: "Toko B - Warung Nyonya", address: "Jl. Sudirman No. 45, Jakarta", whatsapp: "6281234560002", owner: "Budi Santoso", pic: "Dedi", initialBalance: 3500000, initialCapital: 15000000, status: "active", logoColor: "#16A34A" },
+    { id: "st_c", name: "Toko C - Roti Bahagia", address: "Jl. Diponegoro No. 8, Surabaya", whatsapp: "6281234560003", owner: "Budi Santoso", pic: "Sinta", initialBalance: 4200000, initialCapital: 18000000, status: "active", logoColor: "#F59E0B" },
+    { id: "st_d", name: "Toko D - Laundry Bersih", address: "Jl. Gatot Subroto No. 3, Semarang", whatsapp: "6281234560004", owner: "Budi Santoso", pic: "Andi", initialBalance: 1800000, initialCapital: 10000000, status: "nonactive", logoColor: "#DB2777" },
   ];
-  return (
-    <svg className={className} viewBox="0 0 500 280" preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-      {paths.map((d, i) => <path key={i} d={d} fill="none" stroke={color} strokeWidth="1" opacity={opacity - i * 0.012} />)}
-    </svg>
-  );
+
+  const productsByStore = {
+    st_a: [
+      { name: "Kopi Susu", price: 22000, cost: 9000, sku: "KS-01" },
+      { name: "Americano", price: 18000, cost: 6000, sku: "AM-01" },
+      { name: "Croissant", price: 25000, cost: 12000, sku: "CR-01" },
+      { name: "Matcha Latte", price: 24000, cost: 10000, sku: "ML-01" },
+    ],
+    st_b: [
+      { name: "Nasi Campur", price: 20000, cost: 11000, sku: "NC-01" },
+      { name: "Es Teh", price: 5000, cost: 1500, sku: "ET-01" },
+      { name: "Ayam Goreng", price: 15000, cost: 8000, sku: "AG-01" },
+      { name: "Tahu Tempe", price: 8000, cost: 3500, sku: "TT-01" },
+    ],
+    st_c: [
+      { name: "Roti Coklat", price: 12000, cost: 5000, sku: "RC-01" },
+      { name: "Roti Keju", price: 13000, cost: 5500, sku: "RK-01" },
+      { name: "Donat", price: 8000, cost: 3000, sku: "DN-01" },
+      { name: "Brownies", price: 18000, cost: 7500, sku: "BR-01" },
+    ],
+    st_d: [
+      { name: "Cuci Kiloan", price: 7000, cost: 2500, sku: "CK-01" },
+      { name: "Cuci Sepatu", price: 25000, cost: 8000, sku: "CS-01" },
+      { name: "Setrika", price: 4000, cost: 1000, sku: "SR-01" },
+    ],
+  };
+
+  const products = [];
+  for (const s of stores) {
+    (productsByStore[s.id] || []).forEach((p, i) => {
+      products.push({
+        id: uid("prod"), storeId: s.id, name: p.name, sku: p.sku, category: "Umum",
+        price: p.price, cost: p.cost, stock: 40 + Math.floor(Math.random() * 60),
+        minStock: 10, status: "active",
+      });
+    });
+  }
+
+  const sales = [];
+  const expenses = [];
+  const handovers = [];
+  const cashiers = ["Rani", "Dedi", "Sinta", "Andi", "Wulan"];
+  const today = new Date();
+
+  for (const s of stores) {
+    if (s.status !== "active") continue;
+    const storeProducts = products.filter((p) => p.storeId === s.id);
+    for (let dOffset = 29; dOffset >= 0; dOffset--) {
+      const day = addDays(today, -dOffset);
+      const numSales = 4 + Math.floor(Math.random() * 8);
+      let dayTotal = 0;
+      const methodTotals = { cash: 0, transfer: 0, qris: 0, ewallet: 0, debit: 0, kredit: 0 };
+      for (let i = 0; i < numSales; i++) {
+        const hour = 8 + Math.floor(Math.random() * 12);
+        const minute = Math.floor(Math.random() * 60);
+        const date = new Date(day); date.setHours(hour, minute, 0, 0);
+        const itemCount = 1 + Math.floor(Math.random() * 3);
+        const items = [];
+        let subtotal = 0;
+        for (let k = 0; k < itemCount; k++) {
+          const p = storeProducts[Math.floor(Math.random() * storeProducts.length)];
+          const qty = 1 + Math.floor(Math.random() * 3);
+          const lineTotal = p.price * qty;
+          subtotal += lineTotal;
+          items.push({ productId: p.id, name: p.name, qty, price: p.price, cost: p.cost, total: lineTotal });
+        }
+        const discount = Math.random() < 0.2 ? Math.round(subtotal * 0.05) : 0;
+        const total = subtotal - discount;
+        const method = PAYMENT_METHODS[Math.floor(Math.random() * PAYMENT_METHODS.length)].id;
+        methodTotals[method] += total;
+        dayTotal += total;
+        sales.push({
+          id: uid("sale"), storeId: s.id, date: date.toISOString(), txNumber: `TRX-${s.id.slice(3).toUpperCase()}-${dayKey(date).replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
+          items, subtotal, discount, total, method, cashier: cashiers[Math.floor(Math.random() * cashiers.length)], notes: "",
+        });
+      }
+      // expenses ~1-2 per day
+      const numExp = Math.random() < 0.7 ? 1 : 2;
+      let expTotal = 0;
+      for (let i = 0; i < numExp; i++) {
+        const cat = EXPENSE_CATEGORIES[Math.floor(Math.random() * EXPENSE_CATEGORIES.length)];
+        const amount = Math.round((30000 + Math.random() * 250000) / 1000) * 1000;
+        expTotal += amount;
+        const date = new Date(day); date.setHours(9 + Math.floor(Math.random() * 9), Math.floor(Math.random() * 60));
+        expenses.push({
+          id: uid("exp"), storeId: s.id, date: date.toISOString(), category: cat, amount,
+          method: Math.random() < 0.6 ? "cash" : "transfer", description: `${cat} harian`,
+          by: cashiers[Math.floor(Math.random() * cashiers.length)], notes: "", proof: null,
+        });
+      }
+      // handover: most days handed over most of profit
+      const profit = dayTotal - expTotal;
+      if (profit > 0 && Math.random() < 0.85) {
+        const pct = 0.5 + Math.random() * 0.5;
+        const amount = Math.round((profit * pct) / 1000) * 1000;
+        const date = new Date(day); date.setHours(20, Math.floor(Math.random() * 60));
+        handovers.push({
+          id: uid("hd"), storeId: s.id, date: date.toISOString(), amount,
+          type: "Serahan keuntungan", by: s.pic, receivedBy: s.owner,
+          method: Math.random() < 0.5 ? "cash" : "transfer", notes: "", proof: null,
+        });
+      }
+    }
+  }
+
+  return { stores, products, sales, expenses, handovers, notifications: [], auditLog: [] };
 }
 
-function Card({ C, children, style, className = "", pad = "p-5" }) {
+/* ---------------------------- storage (Supabase, bukan window.storage) ---------------------------- */
+async function loadDB() {
+  return await loadAppData();
+}
+async function saveDB(db) {
+  await saveAppData(db);
+}
+
+/* ---------------------------- context ---------------------------- */
+const AppCtx = createContext(null);
+const useApp = () => useContext(AppCtx);
+
+/* ---------------------------- UI atoms ---------------------------- */
+function cx(...a) { return a.filter(Boolean).join(" "); }
+
+function Card({ className, children, ...rest }) {
+  const { dark } = useApp();
   return (
     <div
-      className={`rounded-2xl ${pad} ${className} transition-shadow duration-300`}
-      style={{ background: C.surface, border: `1px solid ${C.border}`, boxShadow: C.shadow, ...style }}
+      className={cx(
+        "rounded-2xl border shadow-sm",
+        dark ? "bg-slate-800/60 border-slate-700" : "bg-white border-slate-200",
+        className
+      )}
+      {...rest}
     >
       {children}
     </div>
   );
 }
 
-function Badge({ children, tone = "neutral", C }) {
-  const map = {
-    neutral: { bg: C.surface2, fg: C.textMuted },
-    jade: { bg: C.jadeSoft, fg: C.jade },
-    gold: { bg: C.goldSoft, fg: C.gold },
-    coral: { bg: C.coralSoft, fg: C.coral },
-    blue: { bg: `${C.blue}22`, fg: C.blue },
+function Badge({ tone = "neutral", children, className }) {
+  const { dark } = useApp();
+  const tones = {
+    green: dark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-700",
+    red: dark ? "bg-rose-500/15 text-rose-400" : "bg-rose-50 text-rose-700",
+    amber: dark ? "bg-amber-500/15 text-amber-400" : "bg-amber-50 text-amber-700",
+    indigo: dark ? "bg-indigo-500/15 text-indigo-300" : "bg-indigo-50 text-indigo-700",
+    neutral: dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600",
   };
-  const s = map[tone] || map.neutral;
-  return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide" style={{ background: s.bg, color: s.fg }}>{children}</span>;
+  return <span className={cx("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", tones[tone], className)}>{children}</span>;
 }
 
-function ProgressBar({ pct, color, C, height = 8 }) {
-  const clamped = Math.max(0, Math.min(100, pct));
+function Btn({ variant = "primary", size = "md", className, children, ...rest }) {
+  const { dark } = useApp();
+  const sizes = { sm: "px-3 py-1.5 text-xs", md: "px-4 py-2.5 text-sm", lg: "px-5 py-3 text-sm" };
+  const variants = {
+    primary: "bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/20",
+    green: "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shadow-emerald-600/20",
+    red: "bg-rose-600 hover:bg-rose-500 text-white shadow-sm shadow-rose-600/20",
+    ghost: dark ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700" : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200",
+    subtle: dark ? "bg-slate-700/50 hover:bg-slate-700 text-slate-200" : "bg-slate-100 hover:bg-slate-200 text-slate-700",
+  };
   return (
-    <div className="w-full rounded-full overflow-hidden" style={{ background: C.surface2, height }}>
-      <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${clamped}%`, background: color }} />
-    </div>
-  );
-}
-
-function IconBtn({ onClick, children, C, title }) {
-  return (
-    <button onClick={onClick} title={title} className="p-2 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95" style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>
+    <button className={cx("inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition active:scale-[.97] disabled:opacity-50 disabled:pointer-events-none", sizes[size], variants[variant], className)} {...rest}>
       {children}
     </button>
   );
 }
 
-function Modal({ open, onClose, title, children, C }) {
-  if (!open) return null;
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: "rgba(0,0,0,0.55)", animation: "lbFadeIn .18s ease" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[88vh] overflow-y-auto" style={{ background: C.surface, border: `1px solid ${C.border}`, animation: "lbSlideUp .22s cubic-bezier(.2,.8,.2,1)" }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold" style={{ color: C.text, fontFamily: "Fraunces, serif" }}>{title}</h3>
-          <button onClick={onClose} style={{ color: C.textMuted }}><X size={20} /></button>
-        </div>
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-function Field({ label, children, C }) {
+function Field({ label, children, hint, required }) {
+  const { dark } = useApp();
   return (
-    <label className="block mb-3">
-      <span className="block text-xs font-semibold mb-1.5 tracking-wide" style={{ color: C.textMuted }}>{label}</span>
+    <label className="block">
+      <span className={cx("block text-xs font-semibold mb-1.5", dark ? "text-slate-300" : "text-slate-600")}>
+        {label}{required && <span className="text-rose-500"> *</span>}
+      </span>
       {children}
+      {hint && <span className={cx("block text-[11px] mt-1", dark ? "text-slate-500" : "text-slate-400")}>{hint}</span>}
     </label>
   );
 }
 
-const inputStyle = (C) => ({ background: C.surface2, border: `1px solid ${C.border}`, color: C.text, width: "100%", padding: "10px 12px", borderRadius: "10px", fontSize: "14px", outline: "none" });
+function inputCls(dark) {
+  return cx(
+    "w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2",
+    dark ? "bg-slate-900 border-slate-700 text-slate-100 focus:ring-indigo-500/40 focus:border-indigo-500" : "bg-white border-slate-200 text-slate-800 focus:ring-indigo-500/30 focus:border-indigo-400"
+  );
+}
+function Input(props) { const { dark } = useApp(); return <input {...props} className={cx(inputCls(dark), props.className)} />; }
+function Select(props) { const { dark } = useApp(); return <select {...props} className={cx(inputCls(dark), "appearance-none", props.className)} />; }
+function Textarea(props) { const { dark } = useApp(); return <textarea {...props} className={cx(inputCls(dark), props.className)} />; }
 
-function CalculatorPopover({ C, initial, onApply, onClose }) {
-  const [display, setDisplay] = useState(initial && initial !== "0" ? initial : "0");
-  const [acc, setAcc] = useState(null);
-  const [op, setOp] = useState(null);
-  const [resetNext, setResetNext] = useState(false);
-
-  const compute = (a, b, operator) => {
-    switch (operator) {
-      case "+": return a + b;
-      case "-": return a - b;
-      case "×": return a * b;
-      case "÷": return b === 0 ? a : a / b;
-      default: return b;
-    }
-  };
-
-  const pressDigit = (d) => {
-    if (resetNext) { setDisplay(d); setResetNext(false); return; }
-    setDisplay((prev) => (prev === "0" ? d : prev.length < 15 ? prev + d : prev));
-  };
-
-  const pressOp = (nextOp) => {
-    const current = Number(display);
-    if (acc !== null && op && !resetNext) {
-      const result = compute(acc, current, op);
-      setAcc(result);
-      setDisplay(String(result));
-    } else {
-      setAcc(current);
-    }
-    setOp(nextOp);
-    setResetNext(true);
-  };
-
-  const pressEquals = () => {
-    if (acc === null || !op) return;
-    const result = compute(acc, Number(display), op);
-    setDisplay(String(result));
-    setAcc(null);
-    setOp(null);
-    setResetNext(true);
-  };
-
-  const pressClear = () => { setDisplay("0"); setAcc(null); setOp(null); setResetNext(false); };
-  const pressBackspace = () => setDisplay((prev) => (prev.length > 1 ? prev.slice(0, -1) : "0"));
-
-  const applyResult = () => {
-    const finalValue = acc !== null && op ? compute(acc, Number(display), op) : Number(display);
-    onApply(Math.max(0, Math.round(finalValue)));
-  };
-
-  const formatted = display ? Number(display).toLocaleString("id-ID") : "0";
-  const BTN = "py-3 rounded-xl text-base font-medium transition-transform duration-100 active:scale-95";
-
-  return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xs rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold" style={{ fontFamily: "Fraunces, serif", color: C.text }}>Kalkulator</span>
-          <button onClick={onClose} style={{ color: C.textMuted }}><X size={18} /></button>
+function Modal({ open, onClose, title, children, wide }) {
+  const { dark } = useApp();
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className={cx("relative w-full animate-scaleIn rounded-t-3xl sm:rounded-2xl border max-h-[92vh] overflow-y-auto",
+        wide ? "sm:max-w-2xl" : "sm:max-w-md", dark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200")}>
+        <div className={cx("sticky top-0 flex items-center justify-between px-5 py-4 border-b backdrop-blur", dark ? "bg-slate-800/95 border-slate-700" : "bg-white/95 border-slate-100")}>
+          <h3 className="font-display font-bold text-base">{title}</h3>
+          <button onClick={onClose} className={cx("p-1.5 rounded-lg", dark ? "hover:bg-slate-700" : "hover:bg-slate-100")}><X size={18} /></button>
         </div>
-        <div className="rounded-xl px-4 py-4 mb-3 text-right" style={{ background: C.surface2 }}>
-          {op && <div className="text-xs mb-1" style={{ color: C.textMuted }}>{Number(acc).toLocaleString("id-ID")} {op}</div>}
-          <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 24, fontWeight: 600, color: C.text }}>Rp {formatted}</div>
-        </div>
-        <div className="grid grid-cols-4 gap-2 mb-3">
-          <button onClick={pressClear} className={BTN} style={{ background: C.coralSoft, color: C.coral }}>C</button>
-          <button onClick={pressBackspace} className={BTN} style={{ background: C.surface2, color: C.textMuted }}><Delete size={16} className="mx-auto" /></button>
-          <button onClick={() => pressOp("÷")} className={BTN} style={{ background: op === "÷" ? C.jade : C.surface2, color: op === "÷" ? "#08130F" : C.jade }}>÷</button>
-          <button onClick={() => pressOp("×")} className={BTN} style={{ background: op === "×" ? C.jade : C.surface2, color: op === "×" ? "#08130F" : C.jade }}>×</button>
-          {["7", "8", "9"].map((d) => <button key={d} onClick={() => pressDigit(d)} className={BTN} style={{ background: C.surface2, color: C.text }}>{d}</button>)}
-          <button onClick={() => pressOp("-")} className={BTN} style={{ background: op === "-" ? C.jade : C.surface2, color: op === "-" ? "#08130F" : C.jade }}>-</button>
-          {["4", "5", "6"].map((d) => <button key={d} onClick={() => pressDigit(d)} className={BTN} style={{ background: C.surface2, color: C.text }}>{d}</button>)}
-          <button onClick={() => pressOp("+")} className={BTN} style={{ background: op === "+" ? C.jade : C.surface2, color: op === "+" ? "#08130F" : C.jade }}>+</button>
-          {["1", "2", "3"].map((d) => <button key={d} onClick={() => pressDigit(d)} className={BTN} style={{ background: C.surface2, color: C.text }}>{d}</button>)}
-          <button onClick={pressEquals} className="row-span-2 rounded-xl text-base font-semibold transition-transform duration-100 active:scale-95" style={{ background: C.jade, color: "#08130F" }}>=</button>
-          <button onClick={() => pressDigit("0")} className={`${BTN} col-span-2`} style={{ background: C.surface2, color: C.text }}>0</button>
-          <button onClick={() => pressDigit("000")} className={BTN} style={{ background: C.surface2, color: C.text }}>000</button>
-        </div>
-        <button onClick={applyResult} className="w-full py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>
-          Gunakan Nominal Ini
-        </button>
+        <div className="p-5">{children}</div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }
 
-function AmountInput({ value, onChange, C, placeholder = "0" }) {
-  const [showCalc, setShowCalc] = useState(false);
-  const digits = String(value ?? "").replace(/[^\d]/g, "");
-  const formatted = digits ? Number(digits).toLocaleString("id-ID") : "";
+function StatCard({ icon: Icon, label, value, sub, tone = "indigo", delay = 0 }) {
+  const { dark } = useApp();
+  const tones = {
+    indigo: { bg: dark ? "bg-indigo-500/15" : "bg-indigo-50", fg: "text-indigo-500" },
+    green: { bg: dark ? "bg-emerald-500/15" : "bg-emerald-50", fg: "text-emerald-500" },
+    red: { bg: dark ? "bg-rose-500/15" : "bg-rose-50", fg: "text-rose-500" },
+    amber: { bg: dark ? "bg-amber-500/15" : "bg-amber-50", fg: "text-amber-500" },
+  };
+  const t = tones[tone];
   return (
-    <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: C.textMuted }}>Rp</span>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={formatted}
-        onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
-        placeholder={placeholder}
-        style={{ ...inputStyle(C), paddingLeft: 34, paddingRight: 42 }}
-      />
-      <button
-        type="button"
-        onClick={() => setShowCalc(true)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-transform duration-150 hover:scale-105 active:scale-95"
-        style={{ color: C.jade, background: C.jadeSoft }}
-        title="Buka kalkulator"
-      >
-        <Calculator size={15} />
-      </button>
-      {showCalc && (
-        <CalculatorPopover
-          C={C}
-          initial={digits || "0"}
-          onApply={(result) => { onChange(String(result)); setShowCalc(false); }}
-          onClose={() => setShowCalc(false)}
-        />
+    <Card className="p-4 sm:p-5 animate-fadeUp" style={{ animationDelay: `${delay}ms` }}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className={cx("text-xs font-medium", dark ? "text-slate-400" : "text-slate-500")}>{label}</p>
+          <p className="font-display text-xl sm:text-2xl font-extrabold mt-1 tabular">{value}</p>
+          {sub && <p className={cx("text-xs mt-1.5 flex items-center gap-1", dark ? "text-slate-400" : "text-slate-500")}>{sub}</p>}
+        </div>
+        <div className={cx("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", t.bg, t.fg)}>
+          <Icon size={19} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function EmptyState({ icon: Icon = ClipboardList, title, desc }) {
+  const { dark } = useApp();
+  return (
+    <div className="flex flex-col items-center justify-center py-14 text-center px-6">
+      <div className={cx("w-14 h-14 rounded-2xl flex items-center justify-center mb-3", dark ? "bg-slate-800" : "bg-slate-100")}>
+        <Icon size={24} className={dark ? "text-slate-500" : "text-slate-400"} />
+      </div>
+      <p className="font-semibold text-sm">{title}</p>
+      {desc && <p className={cx("text-xs mt-1 max-w-xs", dark ? "text-slate-500" : "text-slate-400")}>{desc}</p>}
+    </div>
+  );
+}
+
+/* ---------------------------- period filter ---------------------------- */
+const PERIODS = [
+  { id: "today", label: "Hari ini" },
+  { id: "yesterday", label: "Kemarin" },
+  { id: "week", label: "Minggu ini" },
+  { id: "month", label: "Bulan ini" },
+  { id: "year", label: "Tahun ini" },
+  { id: "custom", label: "Custom" },
+];
+
+function PeriodFilter({ period, setPeriod, custom, setCustom }) {
+  const { dark } = useApp();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <div className={cx("flex items-center gap-1 p-1 rounded-xl overflow-x-auto no-scrollbar", dark ? "bg-slate-800" : "bg-slate-100")}>
+        {PERIODS.map((p) => (
+          <button key={p.id} onClick={() => setPeriod(p.id)}
+            className={cx("px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition",
+              period === p.id ? "bg-indigo-600 text-white shadow" : dark ? "text-slate-300 hover:bg-slate-700" : "text-slate-600 hover:bg-white")}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {period === "custom" && (
+        <div className="flex items-center gap-1.5">
+          <Input type="date" value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} className="!py-1.5 !text-xs w-[130px]" />
+          <span className={dark ? "text-slate-500" : "text-slate-400"}>—</span>
+          <Input type="date" value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} className="!py-1.5 !text-xs w-[130px]" />
+        </div>
       )}
     </div>
   );
 }
 
-function QuickPaymentModal({ open, onClose, C, title, itemName, remaining, confirmLabel = "Simpan", onConfirm }) {
-  const [amount, setAmount] = useState("");
-  useEffect(() => { if (open) setAmount(""); }, [open]);
-  const submit = () => {
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return;
-    onConfirm(amt);
-    onClose();
+/* ---------------------------- WhatsApp report ---------------------------- */
+function buildWaMessage({ storeName, date, sales, expenses, handoverAmount }) {
+  const totals = { cash: 0, transfer: 0, qris: 0, ewallet: 0, debit: 0, kredit: 0 };
+  let totalSales = 0;
+  sales.forEach((s) => { totals[s.method] = (totals[s.method] || 0) + s.total; totalSales += s.total; });
+  const totalExpense = expenses.reduce((a, e) => a + e.amount, 0);
+  const profit = totalSales - totalExpense;
+  const remaining = profit - handoverAmount;
+  const methodLines = PAYMENT_METHODS.filter((m) => totals[m.id] > 0)
+    .map((m) => `${m.label}: ${fmtIDR(totals[m.id])}`).join("\n");
+
+  return `LAPORAN PENJUALAN
+━━━━━━━━━━━━━━
+🏪 Toko: ${storeName}
+📅 Tanggal: ${fmtDate(date)}
+⏰ Jam: ${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+
+💰 PENJUALAN
+Total: ${fmtIDR(totalSales)}
+
+${methodLines || "-"}
+
+💸 PENGELUARAN
+${fmtIDR(totalExpense)}
+
+📈 KEUNTUNGAN
+${fmtIDR(profit)}
+
+💰 UANG DISERAHKAN
+${fmtIDR(handoverAmount)}
+
+💵 SISA
+${fmtIDR(remaining)}
+
+━━━━━━━━━━━━━━
+Laporan otomatis dari TOKO FINANCE.`;
+}
+
+function WhatsAppSendRow({ message, store }) {
+  const targets = [
+    { label: "Owner", phone: store?.whatsapp },
+    { label: "Manager", phone: store?.whatsapp },
+    { label: "Admin", phone: store?.whatsapp },
+  ];
+  const send = (phone) => {
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank");
+  };
+  const share = async () => {
+    if (navigator.share) { try { await navigator.share({ text: message }); return; } catch (e) {} }
+    send(store?.whatsapp);
   };
   return (
-    <Modal open={open} onClose={onClose} title={title} C={C}>
-      {itemName && (
-        <div className="mb-4 px-3 py-2.5 rounded-lg" style={{ background: C.surface2 }}>
-          <div className="text-sm font-medium" style={{ color: C.text }}>{itemName}</div>
-          {remaining != null && <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>Sisa: {fmtIDR(remaining)}</div>}
-        </div>
-      )}
-      <Field label="Jumlah (Rp)" C={C}>
-        <AmountInput value={amount} onChange={setAmount} C={C} />
-      </Field>
-      <button
-        onClick={submit}
-        disabled={!Number(amount)}
-        className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95"
-        style={{ background: Number(amount) ? C.jade : C.surface2, color: Number(amount) ? "#08130F" : C.textMuted }}
-      >
-        {confirmLabel}
-      </button>
-    </Modal>
+    <div className="flex flex-wrap gap-2">
+      {targets.map((t) => (
+        <Btn key={t.label} variant="green" size="sm" onClick={() => send(t.phone)}>
+          <Send size={13} /> Kirim ke {t.label}
+        </Btn>
+      ))}
+      <Btn variant="ghost" size="sm" onClick={share}><ArrowUpRight size={13} /> Share laporan</Btn>
+    </div>
   );
 }
 
-function LoginScreen({ C, onLogin }) {
+/* ============================================================
+   MAIN APP
+   ============================================================ */
+export default function App() {
+  const [dark, setDark] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [db, setDb] = useState(null);
+  const [user, setUser] = useState(null); // {role, name}
+  const [userChecked, setUserChecked] = useState(false);
+  const [page, setPage] = useState("dashboard");
+  const [activeStoreId, setActiveStoreId] = useState("all");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const skipNextSave = useRef(false);
+
+  // Cek sesi login Supabase yang masih aktif + dengarkan perubahan sesi
+  useEffect(() => {
+    getActiveUser().then((u) => {
+      if (u) setUser({ role: u.role === "admin" ? "owner" : "kasir", name: u.name });
+      setUserChecked(true);
+    });
+    const unsub = subscribeAuth((u) => {
+      setUser(u ? { role: u.role === "admin" ? "owner" : "kasir", name: u.name } : null);
+    });
+    return unsub;
+  }, []);
+
+  const handleLogout = async () => { await signOutUser(); setUser(null); };
+
+  // Ambil data HANYA setelah login dipastikan (supaya tidak "keduluan" ditolak
+  // oleh aturan akses Supabase yang mewajibkan sesi login sah).
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const existing = await loadDB();
+      skipNextSave.current = true;
+      setDb(existing || genDemoData());
+      setLoading(false);
+    })();
+  }, [user]);
+
+  // Sinkron real-time: kalau ada perubahan dari perangkat/anggota tim lain, langsung terapkan di sini.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeAppData((data) => {
+      if (!data) return;
+      skipNextSave.current = true;
+      setDb(data);
+    });
+    return unsub;
+  }, [user]);
+
+  useEffect(() => {
+    if (!loading && db) {
+      if (skipNextSave.current) { skipNextSave.current = false; return; }
+      saveDB(db);
+    }
+  }, [db, loading]);
+
+  const notify = useCallback((msg, tone = "green") => {
+    setToast({ msg, tone, id: uid("t") });
+    setTimeout(() => setToast((t) => (t && t.msg === msg ? null : t)), 2600);
+  }, []);
+
+  const activeStores = useMemo(() => (db ? db.stores.filter((s) => s.status === "active") : []), [db]);
+  const currentStore = useMemo(() => db?.stores.find((s) => s.id === activeStoreId) || null, [db, activeStoreId]);
+
+  if (!userChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <style>{FONT_STYLE}</style>
+        <div className="flex flex-col items-center gap-3 text-slate-400">
+          <div className="w-9 h-9 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="font-body text-sm">Memuat TOKO FINANCE…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className={cx("min-h-screen font-body", dark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-800")}>
+        <style>{FONT_STYLE}</style>
+        <LoginScreen dark={dark} setDark={setDark} onLogin={setUser} />
+      </div>
+    );
+  }
+
+  if (loading || !db) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <style>{FONT_STYLE}</style>
+        <div className="flex flex-col items-center gap-3 text-slate-400">
+          <div className="w-9 h-9 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="font-body text-sm">Memuat data…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const ctx = { dark, db, setDb, notify, user, activeStoreId, setActiveStoreId, currentStore, activeStores };
+
+  return (
+    <AppCtx.Provider value={ctx}>
+      <div className={cx("min-h-screen font-body", dark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-800")}>
+        <style>{FONT_STYLE}</style>
+        <div className="flex">
+          <Sidebar page={page} setPage={setPage} open={mobileNavOpen} setOpen={setMobileNavOpen} />
+          <div className="flex-1 min-w-0 flex flex-col lg:pl-64">
+            <TopBar page={page} setPage={setPage} dark={dark} setDark={setDark} onMenu={() => setMobileNavOpen(true)} onLogout={handleLogout} />
+            <main className="flex-1 px-3.5 sm:px-6 py-4 sm:py-6 pb-24 lg:pb-8 max-w-[1400px] w-full mx-auto">
+              <PageRouter page={page} setPage={setPage} notify={notify} />
+            </main>
+          </div>
+        </div>
+        <BottomNav page={page} setPage={setPage} />
+        {toast && <Toast toast={toast} />}
+      </div>
+    </AppCtx.Provider>
+  );
+}
+
+function Toast({ toast }) {
+  const { dark } = useApp();
+  const tones = { green: "bg-emerald-600", red: "bg-rose-600", indigo: "bg-indigo-600" };
+  return (
+    <div className="fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-[60] animate-fadeUp">
+      <div className={cx("px-4 py-2.5 rounded-xl text-white text-sm font-medium shadow-lg flex items-center gap-2", tones[toast.tone] || tones.indigo)}>
+        <CheckCircle2 size={16} /> {toast.msg}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Login ---------------------------- */
+function LoginScreen({ dark, setDark, onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
   const submit = async () => {
     if (!username.trim() || !password || loading) return;
     setLoading(true);
@@ -345,2307 +611,1336 @@ function LoginScreen({ C, onLogin }) {
     const res = await signIn(username, password);
     setLoading(false);
     if (res.error) { setError(res.error); return; }
-    onLogin(res.user);
+    // role dari Supabase Auth: "admin" -> Owner (akses penuh), "staff" -> Kasir (input saja)
+    onLogin({ role: res.user.role === "admin" ? "owner" : "kasir", name: res.user.name });
   };
+
   return (
-    <div style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "Inter, sans-serif" }} className="flex items-center justify-center p-4 relative overflow-hidden">
-      <style>{`@keyframes lbFadeUp2 { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)} }`}</style>
-      <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(circle at 20% 15%, ${C.jadeSoft}, transparent 45%), radial-gradient(circle at 85% 85%, ${C.goldSoft}, transparent 40%)` }} />
-      <div className="w-full max-w-sm rounded-2xl p-7 sm:p-8 relative overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}`, boxShadow: C.shadowLg, animation: "lbFadeUp2 .45s cubic-bezier(.2,.8,.2,1) both" }}>
-        <ContourLines color={C.jade} opacity={0.12} />
-        <div className="relative">
-          <div className="flex items-center gap-3 mb-7">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, boxShadow: C.glow }}>
-              <Landmark size={20} color="#08130F" />
-            </div>
-            <div>
-              <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 19, color: C.text }}>Lombok Bali</div>
-              <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 0.6, textTransform: "uppercase" }}>Keuangan Kawasan</div>
-            </div>
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+      <button onClick={() => setDark((d) => !d)} className={cx("absolute top-4 right-4 p-2.5 rounded-xl", dark ? "bg-slate-800 text-amber-300" : "bg-white text-slate-600 border border-slate-200")}>
+        {dark ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
+      <div className="w-full max-w-sm animate-fadeUp">
+        <div className="flex items-center gap-2.5 justify-center mb-8">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-600/30">
+            <Wallet size={22} className="text-white" />
           </div>
-          <div className="mb-6">
-            <div style={{ fontFamily: "Fraunces, serif", fontWeight: 500, fontSize: 20, color: C.text, marginBottom: 4 }}>Selamat datang kembali</div>
-            <div className="text-sm" style={{ color: C.textMuted }}>Masuk untuk mengakses sistem keuangan Anda.</div>
+          <div>
+            <p className="font-display font-extrabold text-lg leading-none">TOKO FINANCE</p>
+            <p className={cx("text-[11px] mt-0.5", dark ? "text-slate-400" : "text-slate-500")}>Manajemen keuangan multi-toko</p>
           </div>
-          <Field label="Username" C={C}>
-            <input value={username} onChange={(e) => { setUsername(e.target.value); setError(""); }} placeholder="Masukkan username" style={inputStyle(C)} onKeyDown={(e) => e.key === "Enter" && submit()} autoFocus />
-          </Field>
-          <Field label="Password" C={C}>
-            <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} placeholder="Masukkan password" style={inputStyle(C)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-          </Field>
+        </div>
+        <div className={cx("rounded-2xl border p-5 shadow-sm", dark ? "bg-slate-800/60 border-slate-700" : "bg-white border-slate-200")}>
+          <p className={cx("text-xs font-semibold mb-2", dark ? "text-slate-300" : "text-slate-600")}>Username</p>
+          <input value={username} onChange={(e) => { setUsername(e.target.value); setError(""); }} onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="admin"
+            className={cx("w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none mb-4", dark ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-white border-slate-200")} />
+          <p className={cx("text-xs font-semibold mb-2", dark ? "text-slate-300" : "text-slate-600")}>Password</p>
+          <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="••••••••"
+            className={cx("w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none mb-5", dark ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-white border-slate-200")} />
           {error && (
-            <div className="flex items-center gap-2 text-xs mb-4 px-3 py-2.5 rounded-lg" style={{ background: C.coralSoft, color: C.coral }}>
-              <AlertTriangle size={13} className="shrink-0" /> {error}
-            </div>
+            <div className="mb-4 px-3 py-2.5 rounded-xl text-xs bg-rose-500/10 text-rose-500 border border-rose-500/20">{error}</div>
           )}
-          <button onClick={submit} disabled={!username.trim() || !password || loading} className="w-full py-3 rounded-lg font-semibold mt-1 transition-all duration-150 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2" style={{ background: username.trim() && password ? C.jade : C.surface2, color: username.trim() && password ? "#08130F" : C.textMuted, boxShadow: username.trim() && password ? C.glow : "none" }}>
+          <button onClick={submit} disabled={!username.trim() || !password || loading}
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition active:scale-[.98] flex items-center justify-center gap-2">
             <Lock size={15} /> {loading ? "Memeriksa…" : "Masuk"}
           </button>
         </div>
+        <p className={cx("text-center text-[11px] mt-5", dark ? "text-slate-500" : "text-slate-400")}>
+          Data tersinkron real-time ke semua perangkat tim Anda.
+        </p>
       </div>
     </div>
   );
 }
 
-export default function App() {
-  useFonts();
-  const [isDark, setIsDark] = useState(true);
-  const C = isDark ? PALETTE.dark : PALETTE.light;
-  const [user, setUser] = useState(null);
-  const [userLoaded, setUserLoaded] = useState(false);
-  useEffect(() => {
-    getActiveUser().then((u) => { setUser(u); setUserLoaded(true); });
-    // Dengarkan perubahan sesi (misal token expired, atau logout dari tab lain)
-    const unsub = subscribeAuth((u) => setUser(u));
-    return unsub;
-  }, []);
-  const handleLogin = (u) => setUser(u);
-  const handleLogout = async () => { await signOutUser(); setUser(null); };
+/* ---------------------------- Navigation ---------------------------- */
+const NAV = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "sales", label: "Input Penjualan", icon: ShoppingCart },
+  { id: "expense", label: "Input Pengeluaran", icon: Receipt },
+  { id: "handover", label: "Serahan / Setoran", icon: HandCoins },
+  { id: "history", label: "Riwayat Transaksi", icon: HistoryIcon },
+  { id: "reports", label: "Laporan", icon: FileBarChart },
+  { id: "products", label: "Produk & Stok", icon: Package },
+  { id: "stores", label: "Kelola Toko", icon: Store },
+  { id: "settings", label: "Pengaturan", icon: SettingsIcon },
+];
+const BOTTOM_NAV = ["dashboard", "history", "sales", "reports", "stores"];
 
-  const [projects, setProjects] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [goals, setGoals] = useState([]);
-  const [bills, setBills] = useState([]);
-  const [debts, setDebts] = useState([]);
-  const [people, setPeople] = useState([]);
-  const [funds, setFunds] = useState([]); // riwayat setor/ambil kantong Modal & Keuntungan (manual)
-  const [items, setItems] = useState([]); // katalog barang per projek: { id, projectId, name, costPrice, sellPrice }
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
-  const [activeProject, setActiveProject] = useState("all");
-  const [tab, setTab] = useState("dashboard");
-  const [loaded, setLoaded] = useState(false);
-  const [syncState, setSyncState] = useState("idle");
-  const saveTimer = useRef(null);
-  const skipNextSave = useRef(false);
-
-  const [txModal, setTxModal] = useState(null);
-  const [goalModal, setGoalModal] = useState(null);
-  const [billModal, setBillModal] = useState(null);
-  const [debtModal, setDebtModal] = useState(null);
-  const [personModal, setPersonModal] = useState(null);
-  const [projModal, setProjModal] = useState(null);
-  const [catModal, setCatModal] = useState(false);
-  const [itemModal, setItemModal] = useState(null);
-  const [mobileNav, setMobileNav] = useState(false);
-
-  // Tunggu sesi login selesai dipastikan dulu (user tidak null) sebelum ambil data —
-  // supaya tidak "keduluan" dan ditolak oleh aturan akses (RLS) yang sekarang mewajibkan login.
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const data = await loadAppData();
-      if (data) {
-        skipNextSave.current = true;
-        if (data.projects) setProjects(data.projects);
-        if (data.transactions) setTransactions(data.transactions);
-        if (data.goals) setGoals(data.goals);
-        if (data.bills) setBills(data.bills);
-        if (data.debts) setDebts(data.debts);
-        if (data.people) setPeople(data.people);
-        if (data.funds) setFunds(data.funds);
-        if (data.items) setItems(data.items);
-        if (data.categories) setCategories(hydrateCategories(data.categories));
-      }
-      setLoaded(true);
-    })();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const unsubscribe = subscribeAppData((data) => {
-      if (!data) return;
-      skipNextSave.current = true;
-      if (data.projects) setProjects(data.projects);
-      if (data.transactions) setTransactions(data.transactions);
-      if (data.goals) setGoals(data.goals);
-      if (data.bills) setBills(data.bills);
-      if (data.debts) setDebts(data.debts);
-      if (data.people) setPeople(data.people);
-      if (data.funds) setFunds(data.funds);
-      if (data.items) setItems(data.items);
-      if (data.categories) setCategories(hydrateCategories(data.categories));
-      setSyncState("saved");
-    });
-    return () => {
-      if (typeof unsubscribe === "function") unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!loaded) return;
-    if (skipNextSave.current) { skipNextSave.current = false; return; }
-    setSyncState("saving");
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      await saveAppData({ projects, transactions, goals, bills, debts, people, funds, items, categories });
-      setSyncState("saved");
-    }, 600);
-    return () => clearTimeout(saveTimer.current);
-  }, [projects, transactions, goals, bills, debts, people, funds, items, categories, loaded]);
-
-  const FALLBACK_CATEGORY = { id: "unknown", label: "Lainnya", icon: Tag, color: "#9CB0A6" };
-  const getCat = (id) => categories.find((c) => c.id === id) || categories[categories.length - 1] || FALLBACK_CATEGORY;
-  const getProject = (id) => projects.find((p) => p.id === id);
-
-  const scopedTx = useMemo(
-    () => (activeProject === "all" ? transactions : transactions.filter((t) => t.projectId === activeProject)),
-    [transactions, activeProject]
-  );
-
-  const totals = useMemo(() => {
-    let income = 0, expense = 0;
-    scopedTx.forEach((t) => {
-      if (t.type === "income") income += t.amount; else expense += t.amount;
-    });
-    return { income, expense, balance: income - expense };
-  }, [scopedTx]);
-
-  const thisMonthKey = new Date().toISOString().slice(0, 7);
-  const monthSpend = useMemo(
-    () => scopedTx.filter((t) => t.type === "expense" && monthKey(t.date) === thisMonthKey).reduce((s, t) => s + t.amount, 0),
-    [scopedTx, thisMonthKey]
-  );
-  const monthBudget = useMemo(
-    () => (activeProject === "all" ? projects.reduce((s, p) => s + p.budget, 0) : projects.find((p) => p.id === activeProject)?.budget || 0),
-    [projects, activeProject]
-  );
-
-  // Ringkasan hutang: total seluruh hutang, dan mana yang masih aktif (belum lunas)
-  const debtsSummary = useMemo(() => {
-    const scoped = activeProject === "all" ? debts : debts.filter((d) => d.projectId === activeProject);
-    const total = scoped.reduce((s, d) => s + d.amount, 0);
-    const totalRemaining = scoped.reduce((s, d) => s + Math.max(0, d.amount - d.paidAmount), 0);
-    const activeList = scoped.filter((d) => d.paidAmount < d.amount).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-    return { total, totalRemaining, activeCount: activeList.length, activeList };
-  }, [debts, activeProject]);
-
-  // Saldo kantong Modal/Keuntungan per projek = setoran/ambil manual (funds)
-  // + otomatis dari penjualan barang (splitModal/splitProfit pada transaksi pemasukan)
-  // - otomatis dari pengeluaran yang ditandai sumber dananya (fundSource).
-  const getFundBalance = (projectId, pocket) => {
-    let total = funds.filter((f) => f.projectId === projectId && f.pocket === pocket).reduce((s, f) => s + f.amount, 0);
-    transactions.forEach((t) => {
-      if (t.projectId !== projectId) return;
-      if (t.type === "income") {
-        total += pocket === "modal" ? (t.splitModal || 0) : (t.splitProfit || 0);
-      } else if (t.fundSource === pocket) {
-        total -= t.amount;
-      }
-    });
-    return total;
-  };
-
-  const categoryBreakdown = useMemo(() => {
-    const map = {};
-    scopedTx.filter((t) => t.type === "expense").forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
-    return categories.map((c) => ({ ...c, value: map[c.id] || 0 })).filter((c) => c.value > 0);
-  }, [scopedTx, categories]);
-
-  const monthlyTrend = useMemo(() => {
-    const map = {};
-    transactions
-      .filter((t) => activeProject === "all" || t.projectId === activeProject)
-      .forEach((t) => {
-        const k = monthKey(t.date);
-        if (!map[k]) map[k] = { month: k, Pemasukan: 0, Pengeluaran: 0 };
-        if (t.type === "income") map[k].Pemasukan += t.amount; else map[k].Pengeluaran += t.amount;
-      });
-    return Object.values(map).sort((a, b) => a.month.localeCompare(b.month)).map((r) => ({ ...r, label: monthLabel(r.month) }));
-  }, [transactions, activeProject]);
-
-  const projectComparison = useMemo(
-    () => projects.map((p) => {
-      const exp = transactions.filter((t) => t.projectId === p.id && t.type === "expense" && monthKey(t.date) === thisMonthKey).reduce((s, t) => s + t.amount, 0);
-      return { name: p.name.split(" ")[0], Anggaran: p.budget, Terpakai: exp };
-    }), [projects, transactions, thisMonthKey]
-  );
-
-  const upcomingBills = useMemo(() => bills.filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate)), [bills, activeProject]);
-
-  const projectName = (id) => projects.find((p) => p.id === id)?.name || "Kawasan (Semua Projek)";
-  const projectColor = (id) => projects.find((p) => p.id === id)?.color || C.jade;
-  const isAdmin = user?.role === "admin";
-
-  if (!userLoaded) return <div style={{ background: C.bg, minHeight: "100vh" }} />;
-  if (!user) return <LoginScreen C={C} onLogin={handleLogin} />;
-
-  const NAV = [
-    { id: "dashboard", label: "Dasbor", icon: LayoutDashboard },
-    { id: "kasir", label: "Kasir", icon: ShoppingCart },
-    { id: "projects", label: "PROJEK", icon: Building2 },
-    { id: "keuangan", label: "Keuangan", icon: Wallet },
-    { id: "people", label: "Ahli", icon: Users2 },
-  ];
-
+function Sidebar({ page, setPage, open, setOpen }) {
+  const { dark, db, activeStoreId } = useApp();
   return (
-    <div style={{ background: C.bg, color: C.text, fontFamily: "Inter, sans-serif", minHeight: "100vh", transition: "background .3s ease, color .3s ease" }}>
-      <style>{`
-        @keyframes lbFadeIn { from{opacity:0} to{opacity:1} }
-        @keyframes lbSlideUp { from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:translateY(0)} }
-        @keyframes lbFadeUp { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:translateY(0)} }
-        .lb-anim { animation: lbFadeUp .4s cubic-bezier(.2,.8,.2,1) both; }
-        .lb-row:hover { background: ${C.surface2} !important; }
-        .lb-card-hover:hover { transform: translateY(-2px); box-shadow: ${C.shadowLg} !important; border-color: ${C.jade}55 !important; }
-        button { font-family: inherit; }
-        button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid ${C.jade}; outline-offset: 2px; }
-        input:focus, select:focus { border-color: ${C.jade} !important; box-shadow: 0 0 0 3px ${C.jadeSoft}; }
-        ::selection { background: ${C.jadeSoft}; color: ${C.jade}; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 8px; }
-        * { scrollbar-color: ${C.border} transparent; }
-        @media (prefers-reduced-motion: reduce) { .lb-anim, .lb-card-hover { animation: none !important; transition: none !important; } }
-      `}</style>
-      <div className="flex">
-        <aside className="hidden md:flex flex-col w-64 shrink-0 h-screen sticky top-0 px-4 py-6" style={{ background: C.bgSoft, borderRight: `1px solid ${C.border}`, boxShadow: `4px 0 24px -12px ${isDark ? "rgba(0,0,0,0.5)" : "rgba(24,36,32,0.08)"}` }}>
-          <Brand C={C} />
-          <ProjectSwitcher {...{ projects, activeProject, setActiveProject, C }} />
-          <nav className="mt-6 flex-1 space-y-1">
-            {NAV.map((n) => <NavItem key={n.id} n={n} active={tab === n.id} onClick={() => setTab(n.id)} C={C} />)}
-          </nav>
-          <SyncFooter syncState={syncState} isDark={isDark} setIsDark={setIsDark} C={C} user={user} onLogout={handleLogout} />
-        </aside>
-        <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: C.bgSoft, borderBottom: `1px solid ${C.border}` }}>
-          <div className="flex items-center gap-2">
-            <IconBtn C={C} onClick={() => setMobileNav(true)}><Menu size={16} /></IconBtn>
-            <Brand C={C} compact />
+    <>
+      {open && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setOpen(false)} />}
+      <aside className={cx(
+        "fixed z-50 lg:z-30 top-0 left-0 h-full w-64 border-r flex flex-col transition-transform duration-300 lg:translate-x-0",
+        open ? "translate-x-0" : "-translate-x-full",
+        dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+      )}>
+        <div className="flex items-center justify-between px-5 h-16 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-400 flex items-center justify-center shadow-md shadow-indigo-600/25">
+              <Wallet size={18} className="text-white" />
+            </div>
+            <p className="font-display font-extrabold text-[15px] leading-none">TOKO FINANCE</p>
           </div>
-          <IconBtn C={C} onClick={() => setIsDark((d) => !d)}>{isDark ? <Sun size={16} /> : <Moon size={16} />}</IconBtn>
+          <button onClick={() => setOpen(false)} className="lg:hidden p-1"><X size={18} /></button>
         </div>
-        {/* BOTTOM NAVIGATION (mobile) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch" style={{ background: C.bgSoft, borderTop: `1px solid ${C.border}`, paddingBottom: "env(safe-area-inset-bottom)" }}>
-          {NAV.map((n) => {
-            const Icon = n.icon;
-            const active = tab === n.id;
+        <nav className="flex-1 overflow-y-auto px-3 py-2 no-scrollbar">
+          {NAV.map((n) => (
+            <button key={n.id} onClick={() => { setPage(n.id); setOpen(false); }}
+              className={cx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium mb-1 transition",
+                page === n.id
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                  : dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100")}>
+              <n.icon size={17} /> {n.label}
+            </button>
+          ))}
+        </nav>
+        <div className={cx("m-3 p-3.5 rounded-xl", dark ? "bg-slate-800" : "bg-indigo-50")}>
+          <p className={cx("text-[11px] font-semibold mb-1", dark ? "text-slate-300" : "text-indigo-700")}>Toko aktif</p>
+          <p className="text-xs font-medium truncate">{activeStoreId === "all" ? "Semua Toko" : db.stores.find((s) => s.id === activeStoreId)?.name}</p>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function BottomNav({ page, setPage }) {
+  const { dark } = useApp();
+  const items = NAV.filter((n) => BOTTOM_NAV.includes(n.id));
+  return (
+    <nav className={cx("fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t backdrop-blur-lg", dark ? "bg-slate-900/95 border-slate-800" : "bg-white/95 border-slate-200")}>
+      <div className="flex items-stretch justify-around px-1 py-1.5">
+        {items.map((n) => {
+          const active = page === n.id;
+          if (n.id === "sales") {
             return (
-              <button
-                key={n.id}
-                onClick={() => setTab(n.id)}
-                className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-colors duration-150"
-                style={{ color: active ? C.jade : C.textMuted }}
-              >
-                <Icon size={19} />
-                <span className="text-[10px] font-medium leading-none">{n.label}</span>
+              <button key={n.id} onClick={() => setPage(n.id)} className="flex flex-col items-center -mt-5">
+                <span className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/40">
+                  <Plus size={22} />
+                </span>
+                <span className={cx("text-[10px] font-semibold mt-1", active ? "text-indigo-500" : dark ? "text-slate-400" : "text-slate-500")}>Jual</span>
               </button>
             );
-          })}
-        </nav>
-        <div className="md:hidden fixed inset-0 z-50" style={{ pointerEvents: mobileNav ? "auto" : "none" }} aria-hidden={!mobileNav}>
-          <div onClick={() => setMobileNav(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", opacity: mobileNav ? 1 : 0, transition: "opacity .25s ease" }} />
-          <div className="absolute top-0 left-0 h-full w-72 max-w-[82vw] px-4 py-5 flex flex-col overflow-y-auto" style={{ background: C.bgSoft, borderRight: `1px solid ${C.border}`, transform: mobileNav ? "translateX(0)" : "translateX(-100%)", transition: "transform .28s cubic-bezier(.2,.8,.2,1)" }}>
-            <div className="flex items-center justify-between mb-2">
-              <Brand C={C} />
-              <button onClick={() => setMobileNav(false)} style={{ color: C.textMuted }}><X size={20} /></button>
-            </div>
-            <ProjectSwitcher {...{ projects, activeProject, setActiveProject: (v) => { setActiveProject(v); setMobileNav(false); }, C }} />
-            <SyncFooter syncState={syncState} isDark={isDark} setIsDark={setIsDark} C={C} user={user} onLogout={handleLogout} />
-          </div>
-        </div>
-        <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full">
-          {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
-          {tab === "kasir" && <KasirView {...{ C, projects, items, activeProject, setActiveProject, onCheckout: (sale) => setTransactions((prev) => [{ id: uid("t"), type: "income", category: categories[0]?.id, date: new Date().toISOString().slice(0, 10), ...sale }, ...prev]) }} />}
-          {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }} />}
-          {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject, funds, setFunds, getFundBalance, items, setItems, setItemModal }} />}
-          {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
-        </main>
+          }
+          return (
+            <button key={n.id} onClick={() => setPage(n.id)} className="flex flex-col items-center justify-center gap-0.5 px-2 py-1 min-w-[56px]">
+              <n.icon size={19} className={active ? "text-indigo-500" : dark ? "text-slate-400" : "text-slate-400"} />
+              <span className={cx("text-[10px] font-medium", active ? "text-indigo-500" : dark ? "text-slate-500" : "text-slate-500")}>{n.label.split(" ")[0]}</span>
+            </button>
+          );
+        })}
       </div>
-      {tab !== "kasir" && (
-        <button onClick={() => setTxModal("new")} className="fixed bottom-20 md:bottom-6 right-6 z-30 flex items-center gap-2 px-5 py-3.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, color: "#08130F", fontWeight: 600, boxShadow: C.shadowLg }}>
-          <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
-        </button>
-      )}
-      <AddTransactionModal
-        open={!!txModal} editing={txModal && txModal !== "new" ? txModal : null} onClose={() => setTxModal(null)}
-        C={C} projects={projects} goals={goals} debts={debts} categories={categories} productItems={items}
-        onAddTransaction={(t) => setTransactions((prev) => [{ id: uid("t"), ...t }, ...prev])}
-        onEditTransaction={(id, data) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)))}
-        onContributeGoal={(goalId, amt) => setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, current: g.current + amt } : g)))}
-        onPayDebt={(debtId, amt) => setDebts((prev) => prev.map((d) => (d.id === debtId ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)))}
-      />
-      <ManageCategoriesModal open={catModal} onClose={() => setCatModal(false)} C={C} categories={categories} setCategories={setCategories} />
-      <AddGoalModal open={!!goalModal} editing={goalModal && goalModal !== "new" ? goalModal : null} onClose={() => setGoalModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setGoals((prev) => prev.map((g) => (g.id === data.id ? { ...g, ...data } : g))); else setGoals((prev) => [{ id: uid("g"), current: 0, ...data }, ...prev]); }} />
-      <AddBillModal open={!!billModal} editing={billModal && billModal !== "new" ? billModal : null} onClose={() => setBillModal(null)} C={C} projects={projects} categories={categories} onSave={(data) => { if (data.id) setBills((prev) => prev.map((b) => (b.id === data.id ? { ...b, ...data } : b))); else setBills((prev) => [{ id: uid("b"), paidAmount: 0, ...data }, ...prev]); }} />
-      <AddDebtModal open={!!debtModal} editing={debtModal && debtModal !== "new" ? debtModal : null} onClose={() => setDebtModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setDebts((prev) => prev.map((d) => (d.id === data.id ? { ...d, ...data } : d))); else setDebts((prev) => [{ id: uid("d"), paidAmount: 0, ...data }, ...prev]); }} />
-      <AddPersonModal open={!!personModal} editing={personModal && personModal !== "new" ? personModal : null} onClose={() => setPersonModal(null)} C={C} projects={projects} onSave={(data) => { if (data.id) setPeople((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setPeople((prev) => [{ id: uid("ah"), ...data }, ...prev]); }} />
-      <AddItemModal open={!!itemModal} editing={itemModal && itemModal !== "new" ? itemModal : null} onClose={() => setItemModal(null)} C={C} projects={projects} activeProject={activeProject} onSave={(data) => { if (data.id) setItems((prev) => prev.map((it) => (it.id === data.id ? { ...it, ...data } : it))); else setItems((prev) => [{ id: uid("it"), ...data }, ...prev]); }} />
-      <AddProjectModal open={!!projModal} editing={projModal && projModal !== "new" ? projModal : null} onClose={() => setProjModal(null)} C={C} onSave={(data) => { if (data.id) setProjects((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p))); else setProjects((prev) => [...prev, { id: uid("p"), color: PROJECT_COLORS[prev.length % PROJECT_COLORS.length], ...data }]); }} />
-    </div>
+    </nav>
   );
 }
 
-function Brand({ C, compact }) {
+function TopBar({ page, dark, setDark, onMenu, onLogout }) {
+  const { db, activeStoreId, setActiveStoreId, user } = useApp();
+  const title = NAV.find((n) => n.id === page)?.label || "Dashboard";
   return (
-    <div className="flex items-center gap-2.5 mb-1">
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, boxShadow: C.glow }}>
-        <Landmark size={18} color="#08130F" />
+    <header className={cx("h-16 shrink-0 flex items-center gap-3 px-3.5 sm:px-6 border-b sticky top-0 z-30 backdrop-blur-lg", dark ? "bg-slate-950/90 border-slate-800" : "bg-slate-50/90 border-slate-200")}>
+      <button onClick={onMenu} className={cx("lg:hidden p-2 rounded-lg", dark ? "bg-slate-800" : "bg-white border border-slate-200")}><Menu size={17} /></button>
+      <div className="min-w-0 flex-1">
+        <h1 className="font-display font-bold text-base sm:text-lg truncate">{title}</h1>
       </div>
-      {!compact && (
-        <div>
-          <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 17, lineHeight: 1, color: C.text, letterSpacing: 0.2 }}>Lombok Bali</div>
-          <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: 0.6, textTransform: "uppercase" }}>Keuangan Kawasan</div>
-        </div>
-      )}
-      {compact && <div style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Lombok Bali</div>}
-    </div>
-  );
-}
-
-function ProjectSwitcher({ projects, activeProject, setActiveProject, C }) {
-  return (
-    <div className="mt-6">
-      <div className="text-xs font-medium mb-2 px-1" style={{ color: C.textMuted }}>KAWASAN</div>
-      <button onClick={() => setActiveProject("all")} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg mb-1 text-sm transition-all duration-150" style={{ background: activeProject === "all" ? C.jadeSoft : "transparent", color: activeProject === "all" ? C.jade : C.textMuted, fontWeight: activeProject === "all" ? 600 : 500 }}>
-        <Sparkles size={15} /> Semua Projek
+      <Select value={activeStoreId} onChange={(e) => setActiveStoreId(e.target.value)} className="!py-2 !text-xs w-32 sm:w-48 shrink-0">
+        <option value="all">Semua Toko</option>
+        {db.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </Select>
+      <button onClick={() => setDark((d) => !d)} className={cx("p-2 rounded-lg shrink-0", dark ? "bg-slate-800 text-amber-300" : "bg-white text-slate-600 border border-slate-200")}>
+        {dark ? <Sun size={16} /> : <Moon size={16} />}
       </button>
-      <div className="max-h-40 overflow-y-auto space-y-1">
-        {projects.length === 0 && <div className="px-3 text-xs" style={{ color: C.textMuted }}>Belum ada projek</div>}
-        {projects.map((p) => (
-          <button key={p.id} onClick={() => setActiveProject(p.id)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150" style={{ background: activeProject === p.id ? C.surface2 : "transparent", color: activeProject === p.id ? C.text : C.textMuted, fontWeight: activeProject === p.id ? 600 : 500 }}>
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-            <span className="truncate text-left">{p.name}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NavItem({ n, active, onClick, C }) {
-  const Icon = n.icon;
-  return (
-    <button onClick={onClick} className="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150" style={{ background: active ? C.jadeSoft : "transparent", color: active ? C.jade : C.textMuted, fontWeight: active ? 600 : 500 }}>
-      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-full" style={{ background: C.jade }} />}
-      <Icon size={17} /> {n.label}
-    </button>
-  );
-}
-
-function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
-  const RoleIcon = user?.role === "admin" ? ShieldCheck : UserCog;
-  return (
-    <div className="pt-4 mt-4" style={{ borderTop: `1px solid ${C.border}` }}>
-      {user && (
-        <div className="flex items-center gap-2.5 mb-3 px-1">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>
-            <RoleIcon size={14} color={C.jade} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium truncate" style={{ color: C.text }}>{user.name}</div>
-            <div className="text-xs capitalize" style={{ color: C.textMuted }}>{user.role === "admin" ? "Admin" : "Staff"}</div>
-          </div>
-          <button onClick={onLogout} title="Keluar" className="p-1.5 rounded-md transition-transform duration-150 hover:scale-110" style={{ color: C.textMuted }}><LogOut size={15} /></button>
-        </div>
-      )}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-xs" style={{ color: C.textMuted }}>
-          {syncState === "saving" ? <Cloud size={14} className="animate-pulse" /> : <Cloud size={14} style={{ color: C.jade }} />}
-          {syncState === "saving" ? "Menyimpan data…" : "Data tersimpan"}
-        </div>
-      </div>
-      <button onClick={() => setIsDark((d) => !d)} className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200" style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>
-        {isDark ? <Sun size={15} /> : <Moon size={15} />} {isDark ? "Mode Terang" : "Mode Gelap"}
+      <button onClick={onLogout} className={cx("hidden sm:flex p-2 rounded-lg shrink-0", dark ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200")} title="Keluar">
+        <LogOut size={16} />
       </button>
-    </div>
+    </header>
   );
 }
 
-/* ---------------------------------------------------------------
-   KASIR — tampilan ala POS restoran: grid menu, keranjang, bayar
-----------------------------------------------------------------*/
-function KasirView({ C, projects, items, activeProject, setActiveProject, onCheckout }) {
-  const kasirProjectId = activeProject !== "all" ? activeProject : (projects[0]?.id || "");
-  const [cart, setCart] = useState({}); // { itemId: qty }
-  const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [success, setSuccess] = useState(null);
-
-  const projectItems = items.filter((it) => it.projectId === kasirProjectId);
-
-  const addToCart = (id) => setCart((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
-  const decFromCart = (id) => setCart((prev) => {
-    const next = { ...prev };
-    if (!next[id]) return next;
-    next[id] -= 1;
-    if (next[id] <= 0) delete next[id];
-    return next;
-  });
-  const removeFromCart = (id) => setCart((prev) => { const next = { ...prev }; delete next[id]; return next; });
-  const clearCart = () => setCart({});
-
-  const cartLines = Object.entries(cart).map(([id, qty]) => {
-    const item = items.find((it) => it.id === id);
-    return item ? { item, qty } : null;
-  }).filter(Boolean);
-  const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
-  const cartTotal = cartLines.reduce((s, l) => s + l.qty * l.item.sellPrice, 0);
-  const cartModal = cartLines.reduce((s, l) => s + l.qty * l.item.costPrice, 0);
-  const cartProfit = cartTotal - cartModal;
-
-  const bayar = () => {
-    if (cartLines.length === 0) return;
-    const note = cartLines.map((l) => `${l.qty}x ${l.item.name}`).join(", ");
-    onCheckout({
-      projectId: kasirProjectId,
-      amount: cartTotal,
-      splitModal: cartModal,
-      splitProfit: cartProfit,
-      note,
-      paymentMethod,
-    });
-    setSuccess({ note, total: cartTotal });
-    clearCart();
-    setTimeout(() => setSuccess(null), 2500);
-  };
-
-  if (projects.length === 0) {
-    return <div className="text-sm" style={{ color: C.textFaint }}>Buat projek dulu sebelum memakai Kasir.</div>;
+function PageRouter({ page, setPage, notify }) {
+  switch (page) {
+    case "dashboard": return <Dashboard goto={setPage} />;
+    case "sales": return <SalesPage />;
+    case "expense": return <ExpensePage />;
+    case "handover": return <HandoverPage />;
+    case "history": return <HistoryPage />;
+    case "reports": return <ReportsPage />;
+    case "products": return <ProductsPage />;
+    case "stores": return <StoresPage />;
+    case "settings": return <SettingsPage />;
+    default: return null;
   }
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+function useComputedStats(storeId, period, custom) {
+  const { db } = useApp();
+  return useMemo(() => {
+    const range = periodRange(period, custom);
+    const storeIds = storeId === "all" ? db.stores.map((s) => s.id) : [storeId];
+    const sales = db.sales.filter((s) => storeIds.includes(s.storeId) && inRange(s.date, range));
+    const expenses = db.expenses.filter((e) => storeIds.includes(e.storeId) && inRange(e.date, range));
+    const handovers = db.handovers.filter((h) => storeIds.includes(h.storeId) && inRange(h.date, range));
+
+    const totalIncome = sales.reduce((a, s) => a + s.total, 0);
+    const totalExpense = expenses.reduce((a, e) => a + e.amount, 0);
+    const profit = totalIncome - totalExpense;
+    const totalHandover = handovers.reduce((a, h) => a + h.amount, 0);
+    const notHandedOver = Math.max(profit - totalHandover, 0);
+
+    const totalCapital = db.stores.filter((s) => storeIds.includes(s.id)).reduce((a, s) => a + s.initialCapital, 0);
+    // saldo = initial balance + all-time income - all-time expense - all-time handover (not limited to period)
+    const allSales = db.sales.filter((s) => storeIds.includes(s.storeId));
+    const allExpenses = db.expenses.filter((e) => storeIds.includes(e.storeId));
+    const allHandovers = db.handovers.filter((h) => storeIds.includes(h.storeId));
+    const initialBalance = db.stores.filter((s) => storeIds.includes(s.id)).reduce((a, s) => a + s.initialBalance, 0);
+    const saldo = initialBalance + allSales.reduce((a, s) => a + s.total, 0) - allExpenses.reduce((a, e) => a + e.amount, 0) - allHandovers.reduce((a, h) => a + h.amount, 0);
+
+    const methodTotals = {};
+    PAYMENT_METHODS.forEach((m) => { methodTotals[m.id] = 0; });
+    sales.forEach((s) => { methodTotals[s.method] += s.total; });
+
+    // daily series across range
+    const days = [];
+    let cursor = new Date(range[0]);
+    while (cursor <= range[1] && days.length < 370) {
+      days.push(dayKey(cursor));
+      cursor = addDays(cursor, 1);
+    }
+    const byDay = days.map((dk) => {
+      const dSales = sales.filter((s) => dayKey(s.date) === dk).reduce((a, s) => a + s.total, 0);
+      const dExp = expenses.filter((e) => dayKey(e.date) === dk).reduce((a, e) => a + e.amount, 0);
+      return { day: dk, label: new Date(dk).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }), income: dSales, expense: dExp, profit: dSales - dExp };
+    });
+
+    const perStore = db.stores.map((s) => {
+      const ss = db.sales.filter((x) => x.storeId === s.id && inRange(x.date, range));
+      const se = db.expenses.filter((x) => x.storeId === s.id && inRange(x.date, range));
+      const income = ss.reduce((a, x) => a + x.total, 0);
+      const expense = se.reduce((a, x) => a + x.amount, 0);
+      return { store: s, income, expense, profit: income - expense, txCount: ss.length };
+    });
+
+    return { range, sales, expenses, handovers, totalIncome, totalExpense, profit, totalHandover, notHandedOver, totalCapital, saldo, methodTotals, byDay, perStore };
+  }, [db, storeId, period, custom]);
+}
+
+function Dashboard({ goto }) {
+  const { dark, db, activeStoreId, currentStore } = useApp();
+  const [period, setPeriod] = useState("month");
+  const [custom, setCustom] = useState({ from: dayKey(addDays(new Date(), -7)), to: dayKey(new Date()) });
+  const stats = useComputedStats(activeStoreId, period, custom);
+
+  const isAll = activeStoreId === "all";
 
   return (
-    <div className="lb-anim">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})` }}>
-            <ShoppingCart size={18} color="#08130F" />
-          </div>
-          <div>
-            <h2 style={{ fontFamily: "Fraunces, serif", fontWeight: 700, fontSize: 22, color: C.text }}>Kasir</h2>
-            <p className="text-xs" style={{ color: C.textMuted }}>Pilih menu, lalu proses pembayaran</p>
-          </div>
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <p className="font-display font-extrabold text-xl">{isAll ? "Ringkasan Semua Toko" : currentStore?.name}</p>
+          <p className={cx("text-xs mt-0.5", dark ? "text-slate-400" : "text-slate-500")}>
+            {isAll ? `${db.stores.filter(s=>s.status==='active').length} toko aktif` : currentStore?.address}
+          </p>
         </div>
-        <select value={kasirProjectId} onChange={(e) => setActiveProject(e.target.value)} style={{ ...inputStyle(C), width: "auto" }}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <PeriodFilter period={period} setPeriod={setPeriod} custom={custom} setCustom={setCustom} />
       </div>
 
-      {success && (
-        <div className="mb-4 p-4 rounded-2xl flex items-center gap-3" style={{ background: C.jadeSoft, border: `1px solid ${C.jade}` }}>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jade }}><Check size={18} color="#08130F" /></div>
-          <div>
-            <div className="text-sm font-semibold" style={{ color: C.jade }}>Pembayaran berhasil — {fmtIDR(success.total)}</div>
-            <div className="text-xs" style={{ color: C.textMuted }}>{success.note}</div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard icon={TrendingUp} tone="green" label="Total Pemasukan" value={fmtIDR(stats.totalIncome)} sub={<><ArrowUpRight size={12} className="text-emerald-500" /> {stats.sales.length} transaksi</>} delay={0} />
+        <StatCard icon={TrendingDown} tone="red" label="Total Pengeluaran" value={fmtIDR(stats.totalExpense)} sub={<><ArrowDownRight size={12} className="text-rose-500" /> {stats.expenses.length} catatan</>} delay={40} />
+        <StatCard icon={PiggyBank} tone="indigo" label="Total Keuntungan" value={fmtIDR(stats.profit)} sub={`Margin ${stats.totalIncome > 0 ? ((stats.profit / stats.totalIncome) * 100).toFixed(1) : 0}%`} delay={80} />
+        <StatCard icon={Wallet} tone="amber" label="Saldo Toko" value={fmtIDR(stats.saldo)} sub={`Modal ${fmtIDRshort(stats.totalCapital)}`} delay={120} />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard icon={CheckCircle2} tone="green" label="Sudah Diserahkan" value={fmtIDR(stats.totalHandover)} delay={0} />
+        <StatCard icon={AlertCircle} tone="amber" label="Belum Diserahkan" value={fmtIDR(stats.notHandedOver)} delay={40} />
+        <StatCard icon={ShoppingCart} tone="indigo" label="Rata-rata / Transaksi" value={fmtIDR(stats.sales.length ? stats.totalIncome / stats.sales.length : 0)} delay={80} />
+        <StatCard icon={Boxes} tone="indigo" label="Total Toko" value={String(db.stores.length)} sub={`${db.stores.filter(s=>s.status==='active').length} aktif`} delay={120} />
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <Card className="p-4 sm:p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-display font-bold text-sm">Pemasukan vs Pengeluaran</p>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Pemasukan</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" /> Pengeluaran</span>
+            </div>
           </div>
-        </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={stats.byDay}>
+              <defs>
+                <linearGradient id="incGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10B981" stopOpacity={0.35} /><stop offset="100%" stopColor="#10B981" stopOpacity={0} /></linearGradient>
+                <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#EF4444" stopOpacity={0.3} /><stop offset="100%" stopColor="#EF4444" stopOpacity={0} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#1e293b" : "#f1f5f9"} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? "#64748b" : "#94a3b8" }} axisLine={false} tickLine={false} minTickGap={20} />
+              <YAxis tick={{ fontSize: 10, fill: dark ? "#64748b" : "#94a3b8" }} tickFormatter={fmtIDRshort} axisLine={false} tickLine={false} width={48} />
+              <Tooltip formatter={(v) => fmtIDR(v)} contentStyle={{ fontSize: 12, borderRadius: 12, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,.1)" }} />
+              <Area type="monotone" dataKey="income" stroke="#10B981" strokeWidth={2} fill="url(#incGrad)" />
+              <Area type="monotone" dataKey="expense" stroke="#EF4444" strokeWidth={2} fill="url(#expGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card className="p-4 sm:p-5">
+          <p className="font-display font-bold text-sm mb-3">Metode Pembayaran</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={PAYMENT_METHODS.map((m) => ({ name: m.label, value: stats.methodTotals[m.id] })).filter((d) => d.value > 0)}
+                dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={3}>
+                {PAYMENT_METHODS.map((m, i) => <Cell key={m.id} fill={m.color} />)}
+              </Pie>
+              <Tooltip formatter={(v) => fmtIDR(v)} contentStyle={{ fontSize: 12, borderRadius: 12, border: "none" }} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="space-y-1.5 mt-1">
+            {PAYMENT_METHODS.filter((m) => stats.methodTotals[m.id] > 0).map((m) => (
+              <div key={m.id} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: m.color }} />{m.label}</span>
+                <span className="font-semibold tabular">{fmtIDRshort(stats.methodTotals[m.id])}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {isAll && (
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-display font-bold text-sm">Perbandingan Performa Antar Toko</p>
+            <Badge tone="indigo"><Sparkles size={11} /> Konsolidasi</Badge>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={stats.perStore.map((p) => ({ name: p.store.name.split(" - ")[0], income: p.income, expense: p.expense, profit: p.profit }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#1e293b" : "#f1f5f9"} vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: dark ? "#64748b" : "#94a3b8" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: dark ? "#64748b" : "#94a3b8" }} tickFormatter={fmtIDRshort} axisLine={false} tickLine={false} width={48} />
+              <Tooltip formatter={(v) => fmtIDR(v)} contentStyle={{ fontSize: 12, borderRadius: 12, border: "none" }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="income" name="Pemasukan" fill="#10B981" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="expense" name="Pengeluaran" fill="#EF4444" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="profit" name="Keuntungan" fill="#4F46E5" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            {stats.perStore.map((p) => (
+              <button key={p.store.id} onClick={() => goto && goto("dashboard")} className={cx("text-left p-3 rounded-xl border", dark ? "border-slate-700 hover:bg-slate-800" : "border-slate-100 hover:bg-slate-50")}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.store.logoColor }} />
+                  <span className="text-xs font-semibold truncate">{p.store.name}</span>
+                </div>
+                <p className="font-display font-bold text-sm tabular">{fmtIDR(p.profit)}</p>
+                <p className={cx("text-[11px]", dark ? "text-slate-400" : "text-slate-500")}>{p.txCount} transaksi · {fmtIDRshort(p.income)} penjualan</p>
+              </button>
+            ))}
+          </div>
+        </Card>
       )}
 
-      <div className="grid lg:grid-cols-5 gap-5">
-        {/* GRID MENU */}
-        <div className="lg:col-span-3">
-          {projectItems.length === 0 ? (
-            <Card C={C} className="text-center py-12">
-              <div className="text-sm" style={{ color: C.textFaint }}>Belum ada barang untuk projek ini.</div>
-              <div className="text-xs mt-1" style={{ color: C.textFaint }}>Tambahkan dulu di Keuangan → Barang.</div>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {projectItems.map((it) => {
-                const qty = cart[it.id] || 0;
-                return (
-                  <button
-                    key={it.id}
-                    onClick={() => addToCart(it.id)}
-                    className="relative p-3.5 rounded-2xl text-left transition-all duration-150 hover:scale-[1.03] active:scale-95"
-                    style={{ background: qty > 0 ? C.jadeSoft : C.surface, border: `2px solid ${qty > 0 ? C.jade : C.border}` }}
-                  >
-                    {qty > 0 && (
-                      <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: C.jade, color: "#08130F" }}>{qty}</span>
-                    )}
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-2.5" style={{ background: `${C.gold}22` }}>
-                      <Package size={16} color={C.gold} />
-                    </div>
-                    <div className="text-sm font-semibold mb-0.5 line-clamp-2" style={{ color: C.text, fontFamily: "Fraunces, serif" }}>{it.name}</div>
-                    <div className="text-xs font-medium" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(it.sellPrice)}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* KERANJANG */}
-        <div className="lg:col-span-2">
-          <Card C={C} pad="p-0" className="sticky top-4">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <h3 className="flex items-center gap-2" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>
-                <ShoppingCart size={16} /> Keranjang {cartCount > 0 && <Badge C={C} tone="jade">{cartCount}</Badge>}
-              </h3>
-              {cartLines.length > 0 && <button onClick={clearCart} className="text-xs font-medium" style={{ color: C.coral }}>Kosongkan</button>}
-            </div>
-            {cartLines.length === 0 ? (
-              <div className="px-5 pb-6 text-sm text-center py-6" style={{ color: C.textFaint }}>Keranjang masih kosong.<br />Tap menu di sebelah untuk menambah.</div>
-            ) : (
-              <div className="px-5 pb-3 space-y-2 max-h-72 overflow-y-auto">
-                {cartLines.map((l) => (
-                  <div key={l.item.id} className="flex items-center gap-2 p-2.5 rounded-xl" style={{ background: C.surface2 }}>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate" style={{ color: C.text }}>{l.item.name}</div>
-                      <div className="text-xs" style={{ color: C.textFaint, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(l.item.sellPrice)} x {l.qty}</div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => decFromCart(l.item.id)} className="w-7 h-7 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface, color: C.textMuted, border: `1px solid ${C.border}` }}><Minus size={12} /></button>
-                      <span className="w-5 text-center text-sm font-semibold" style={{ color: C.text }}>{l.qty}</span>
-                      <button onClick={() => addToCart(l.item.id)} className="w-7 h-7 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.jadeSoft, color: C.jade }}><PlusCircle size={12} /></button>
-                    </div>
-                    <div className="text-sm font-semibold shrink-0 w-20 text-right" style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(l.item.sellPrice * l.qty)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {cartLines.length > 0 && (
-              <>
-                <div className="px-5 py-3" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <button onClick={() => setPaymentMethod("cash")} className="py-2 rounded-lg text-sm font-medium transition-all duration-150" style={{ background: paymentMethod === "cash" ? C.jadeSoft : C.surface2, color: paymentMethod === "cash" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "cash" ? C.jade : C.border}` }}>Cash</button>
-                    <button onClick={() => setPaymentMethod("online")} className="py-2 rounded-lg text-sm font-medium transition-all duration-150" style={{ background: paymentMethod === "online" ? C.jadeSoft : C.surface2, color: paymentMethod === "online" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "online" ? C.jade : C.border}` }}>Online</button>
-                  </div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm" style={{ color: C.textMuted }}>Total</span>
-                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: C.text }}>{fmtIDR(cartTotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs" style={{ color: C.textFaint }}>
-                    <span>Modal {fmtIDR(cartModal)}</span>
-                    <span>Untung {fmtIDR(cartProfit)}</span>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <button onClick={bayar} className="w-full py-3.5 rounded-xl font-bold text-base transition-transform duration-150 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2" style={{ background: C.jade, color: "#08130F" }}>
-                    <Check size={18} /> Bayar {fmtIDR(cartTotal)}
-                  </button>
-                </div>
-              </>
-            )}
-          </Card>
-        </div>
-      </div>
+      {!isAll && currentStore && <StoreDetailExtra storeId={activeStoreId} period={period} custom={custom} stats={stats} />}
     </div>
   );
 }
 
-function Dashboard({ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }) {
-  const budgetPct = monthBudget ? (monthSpend / monthBudget) * 100 : 0;
-  const recent = scopedTx.slice(0, 5);
-  const dueSoon = upcomingBills.filter((b) => b.paidAmount < b.amount).slice(0, 4);
-  const upcomingBirthdays = (people || [])
-    .map((p) => ({ person: p, bday: daysUntilBirthday(p.birthDate) }))
-    .filter((x) => x.bday && x.bday.days <= 30)
-    .sort((a, b) => a.bday.days - b.bday.days)
-    .slice(0, 5);
-
-  // Tren pemasukan/pengeluaran dengan pilihan rentang waktu
-  const [trendRange, setTrendRange] = useState("6m");
-  const trendData = useMemo(() => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    if (trendRange === "6m") {
-      const cutoff = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const map = {};
-      scopedTx.forEach((t) => {
-        const d = new Date(t.date + "T00:00:00");
-        if (d < cutoff) return;
-        const k = monthKey(t.date);
-        if (!map[k]) map[k] = { key: k, label: monthLabel(k), Pemasukan: 0, Pengeluaran: 0 };
-        if (t.type === "income") map[k].Pemasukan += t.amount; else map[k].Pengeluaran += t.amount;
-      });
-      return Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
-    }
-    const days = trendRange === "1w" ? 7 : 30;
-    const start = new Date(now); start.setDate(start.getDate() - (days - 1));
-    const map = {};
-    for (let i = 0; i < days; i++) {
-      const d = new Date(start); d.setDate(d.getDate() + i);
-      const k = d.toISOString().slice(0, 10);
-      map[k] = { key: k, label: d.toLocaleDateString("id-ID", { day: "numeric", month: "short" }), Pemasukan: 0, Pengeluaran: 0 };
-    }
-    scopedTx.forEach((t) => {
-      const d = new Date(t.date + "T00:00:00");
-      if (d < start) return;
-      if (map[t.date]) { if (t.type === "income") map[t.date].Pemasukan += t.amount; else map[t.date].Pengeluaran += t.amount; }
-    });
-    return Object.values(map).sort((a, b) => a.key.localeCompare(b.key));
-  }, [scopedTx, trendRange]);
-  const TREND_RANGES = [
-    { id: "1w", label: "1 Minggu" },
-    { id: "1m", label: "1 Bulan" },
-    { id: "6m", label: "6 Bulan" },
-  ];
-
+function StoreDetailExtra({ storeId, stats }) {
+  const { dark, db } = useApp();
+  const store = db.stores.find((s) => s.id === storeId);
+  const receivables = 0; // no piutang demo data
   return (
-    <div className="space-y-6 lb-anim">
-      {people && people.length > 0 && (
-        <Card C={C} pad="p-0" className="lb-anim">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Data Ahli</h3>
-            <button onClick={() => setTab("people")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
-          </div>
-          <div className="grid grid-cols-3 gap-4 px-5 pb-5">
-            {[{ key: "staff-l", label: "Staff L", icon: User }, { key: "staff-p", label: "Staff P", icon: User }, { key: "anak", label: "Anak", icon: Baby }].map((g) => {
-              const Icon = g.icon; const count = people.filter((p) => p.category === g.key).length;
-              return (
-                <div key={g.key} className="rounded-xl p-3.5" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
-                  <Icon size={16} color={C.jade} />
-                  <div className="text-xl font-bold mt-2" style={{ fontFamily: "Fraunces, serif", color: C.text }}>{count}</div>
-                  <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>{g.label}</div>
-                </div>
-              );
-            })}
-          </div>
-          {upcomingBirthdays.length > 0 && (
-            <div className="px-5 pb-5">
-              <div className="flex items-center gap-1.5 mb-2 text-xs font-medium" style={{ color: C.gold }}><Cake size={13} /> Ulang Tahun Segera</div>
-              <div className="space-y-1.5">
-                {upcomingBirthdays.map(({ person, bday }) => (
-                  <div key={person.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: C.goldSoft }}>
-                    <span className="text-sm" style={{ color: C.text }}>{person.name}</span>
-                    <span className="text-xs font-medium" style={{ color: C.gold }}>{bday.days === 0 ? "Hari ini! 🎉" : `${bday.days} hari lagi`} · ke-{bday.nextAge}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
-      <div className="relative overflow-hidden rounded-2xl px-6 py-7 sm:px-8 sm:py-9" style={{ background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surface2} 100%)`, border: `1px solid ${C.border}`, boxShadow: C.shadowLg }}>
-        <ContourLines color={C.jade} opacity={isDark ? 0.16 : 0.09} />
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.jade, boxShadow: `0 0 0 3px ${C.jadeSoft}` }} />
-            <div className="text-xs font-semibold tracking-[0.14em]" style={{ color: C.textMuted }}>
-              {activeProject === "all" ? "SELURUH KAWASAN" : projectName(activeProject).toUpperCase()}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-            <div>
-              <div style={{ color: C.textMuted, fontSize: 13, marginBottom: 4 }}>Saldo Bersih</div>
-              <div style={{ fontFamily: "Fraunces, serif", fontSize: 36, fontWeight: 600, letterSpacing: -0.5, color: totals.balance >= 0 ? C.jade : C.coral }}>{fmtIDR(totals.balance)}</div>
-            </div>
-            <div className="flex gap-6 flex-wrap">
-              <div>
-                <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><ArrowUpRight size={14} color={C.jade} /> Pemasukan</div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600, color: C.text }}>{fmtIDR(totals.income)}</div>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5" style={{ color: C.textMuted, fontSize: 13 }}><ArrowDownRight size={14} color={C.coral} /> Pengeluaran</div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 600, color: C.text }}>{fmtIDR(totals.expense)}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card C={C} className="lb-anim lb-card-hover" style={{ transition: "transform .25s ease, box-shadow .25s ease, border-color .25s ease" }}>
-          <div className="flex items-center justify-between mb-3">
-            <span style={{ color: C.textMuted, fontSize: 13, fontWeight: 500 }}>Projek Aktif</span>
-            <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: C.jadeSoft }}><Building2 size={15} color={C.jade} /></span>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "Fraunces, serif", color: C.text }}>{projects.length}</div>
-        </Card>
-        <Card C={C} className="lb-anim lb-card-hover" style={{ transition: "transform .25s ease, box-shadow .25s ease, border-color .25s ease" }}>
-          <div className="flex items-center justify-between mb-3">
-            <span style={{ color: C.textMuted, fontSize: 13, fontWeight: 500 }}>Anggaran Bulan Ini</span>
-            <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: C.goldSoft }}><Wallet size={15} color={C.gold} /></span>
-          </div>
-          <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(monthBudget)}</div>
-          <div className="mt-2.5"><ProgressBar pct={budgetPct} color={budgetPct > 90 ? C.coral : C.jade} C={C} /></div>
-          <div className="text-xs mt-1.5" style={{ color: C.textMuted }}>{budgetPct.toFixed(0)}% terpakai</div>
-        </Card>
-        <Card C={C} className="lb-anim lb-card-hover" style={{ transition: "transform .25s ease, box-shadow .25s ease, border-color .25s ease" }}>
-          <div className="flex items-center justify-between mb-3">
-            <span style={{ color: C.textMuted, fontSize: 13, fontWeight: 500 }}>Tagihan Menunggu</span>
-            <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: C.coralSoft }}><Bell size={15} color={C.coral} /></span>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "Fraunces, serif", color: C.text }}>{upcomingBills.filter((b) => b.paidAmount < b.amount).length}</div>
-        </Card>
-        <Card C={C} className="lb-anim lb-card-hover" style={{ transition: "transform .25s ease, box-shadow .25s ease, border-color .25s ease" }}>
-          <div className="flex items-center justify-between mb-3">
-            <span style={{ color: C.textMuted, fontSize: 13, fontWeight: 500 }}>Transaksi</span>
-            <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: `${C.blue}22` }}><Receipt size={15} color={C.blue} /></span>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "Fraunces, serif", color: C.text }}>{scopedTx.length}</div>
-        </Card>
-      </div>
-      {debtsSummary && (
-        <Card C={C} pad="p-0" className="lb-anim">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Ringkasan Hutang</h3>
-            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
-          </div>
-          <div className="grid grid-cols-2 gap-4 px-5 pb-4">
-            <div>
-              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Total Hutang</div>
-              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.text }}>{fmtIDR(debtsSummary.total)}</div>
-            </div>
-            <div>
-              <div className="text-xs mb-1" style={{ color: C.textMuted }}>Hutang Aktif</div>
-              <div style={{ fontFamily: "Fraunces, serif", fontSize: 18, fontWeight: 700, color: C.gold }}>{debtsSummary.activeCount}</div>
-              <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>sisa {fmtIDR(debtsSummary.totalRemaining)}</div>
-            </div>
-          </div>
-          <div className="pb-3">
-            {debtsSummary.activeList.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Tidak ada hutang aktif 🎉</div>}
-            {debtsSummary.activeList.slice(0, 4).map((d) => {
-              const pct = d.amount ? (d.paidAmount / d.amount) * 100 : 0;
-              return (
-                <div key={d.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: C.goldSoft }}>
-                    <HandCoins size={15} color={C.gold} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" style={{ color: C.text }}>{d.name}</div>
-                    <div className="text-xs" style={{ color: C.textMuted }}>{projectName(d.projectId)} · {pct.toFixed(0)}% terlunasi</div>
-                  </div>
-                  <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: C.gold }}>{fmtIDR(Math.max(0, d.amount - d.paidAmount))}</div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-      <div className="grid lg:grid-cols-5 gap-6">
-        <Card C={C} className="lg:col-span-3 lb-anim">
-          <div className="flex items-center justify-between mb-4">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Tren</h3>
-            <div className="flex gap-1.5">
-              {TREND_RANGES.map((r) => (
-                <button key={r.id} onClick={() => setTrendRange(r.id)} className="px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-150"
-                  style={{ background: trendRange === r.id ? C.jadeSoft : C.surface2, color: trendRange === r.id ? C.jade : C.textMuted, border: `1px solid ${trendRange === r.id ? C.jade : C.border}` }}>
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {trendData.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data tren</div> :
-            <ResponsiveContainer width="100%" height={230}>
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                <XAxis dataKey="label" stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} interval={trendRange === "1m" ? 3 : 0} />
-                <YAxis stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} />
-                <Line type="monotone" dataKey="Pemasukan" stroke={C.jade} strokeWidth={2.5} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Pengeluaran" stroke={C.coral} strokeWidth={2.5} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          }
-        </Card>
-      </div>
-      <div className="grid lg:grid-cols-5 gap-6">
-        <Card C={C} className="lg:col-span-3">
-          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Pengeluaran per Kategori</h3>
-          {categoryBreakdown.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data</div> :
-            <>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={categoryBreakdown} dataKey="value" nameKey="label" innerRadius={45} outerRadius={68} paddingAngle={3}>
-                    {categoryBreakdown.map((c, i) => <Cell key={i} fill={c.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-1.5 mt-2">
-                {categoryBreakdown.slice(0, 4).map((c) => (
-                  <div key={c.id} className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5" style={{ color: C.textMuted }}><span className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.label}</span>
-                    <span style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(c.value)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          }
-        </Card>
-        <Card C={C} className="lg:col-span-2 lb-anim" pad="p-0">
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Tagihan Mendatang</h3>
-            <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Kelola</button>
-          </div>
-          <div className="pb-3">
-            {dueSoon.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Semua tagihan aman 🎉</div>}
-            {dueSoon.map((b) => {
-              const overdue = new Date(b.dueDate) < new Date(new Date().toDateString());
-              return (
-                <div key={b.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: overdue ? C.coralSoft : C.goldSoft }}>
-                    {overdue ? <AlertTriangle size={15} color={C.coral} /> : <Clock size={15} color={C.gold} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" style={{ color: C.text }}>{b.name}</div>
-                    <div className="text-xs" style={{ color: overdue ? C.coral : C.textMuted }}>{projectName(b.projectId)} · {fmtDate(b.dueDate)}</div>
-                  </div>
-                  <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(b.amount)}</div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
-      <Card C={C} pad="p-0" className="lb-anim">
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Transaksi Terbaru</h3>
-          <button onClick={() => setTab("keuangan")} className="text-xs font-medium" style={{ color: C.jade }}>Lihat semua</button>
-        </div>
-        <div>
-          {recent.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textMuted }}>Belum ada transaksi.</div>}
-          {recent.map((t) => {
-            const cat = getCat(t.category);
-            const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
-            return (
-              <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3 transition-colors duration-150" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
-                  {t.type === "income" ? <TrendingUp size={15} color={C.jade} /> : <Icon size={15} color={cat.color} />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate" style={{ color: C.text }}>{t.note}</div>
-                  <div className="text-xs" style={{ color: C.textMuted }}>
-                    {projectName(t.projectId)} · {fmtDate(t.date)}
-                  </div>
-                </div>
-                <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: t.type === "income" ? C.jade : C.text }}>
-                  {t.type === "income" ? "+" : "-"}{fmtIDR(t.amount)}
-                </div>
-              </div>
-            );
-          })}
+    <div className="grid lg:grid-cols-2 gap-4">
+      <Card className="p-4 sm:p-5">
+        <p className="font-display font-bold text-sm mb-3">Cash Flow Harian</p>
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={stats.byDay}>
+            <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#1e293b" : "#f1f5f9"} vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: dark ? "#64748b" : "#94a3b8" }} axisLine={false} tickLine={false} minTickGap={20} />
+            <YAxis tick={{ fontSize: 10, fill: dark ? "#64748b" : "#94a3b8" }} tickFormatter={fmtIDRshort} axisLine={false} tickLine={false} width={48} />
+            <Tooltip formatter={(v) => fmtIDR(v)} contentStyle={{ fontSize: 12, borderRadius: 12, border: "none" }} />
+            <Line type="monotone" dataKey="profit" name="Keuntungan" stroke="#4F46E5" strokeWidth={2.5} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+      <Card className="p-4 sm:p-5">
+        <p className="font-display font-bold text-sm mb-3">Info Toko</p>
+        <div className="space-y-2.5 text-sm">
+          <Row label="Pemilik" value={store.owner} />
+          <Row label="Penanggung jawab" value={store.pic} />
+          <Row label="No. WhatsApp" value={`+${store.whatsapp}`} />
+          <Row label="Modal awal" value={fmtIDR(store.initialCapital)} />
+          <Row label="Piutang" value={fmtIDR(receivables)} />
+          <Row label="Status" value={<Badge tone={store.status === "active" ? "green" : "neutral"}>{store.status === "active" ? "Aktif" : "Nonaktif"}</Badge>} />
         </div>
       </Card>
     </div>
   );
 }
-
-function KeuanganView(props) {
-  const { C } = props;
-  const [subTab, setSubTab] = useState("transactions");
-  const SUBTABS = [
-    { id: "transactions", label: "Transaksi", icon: Receipt },
-    { id: "items", label: "Barang", icon: Package },
-    { id: "budget", label: "Anggaran", icon: Wallet },
-    { id: "savings", label: "Tabungan", icon: PiggyBank },
-    { id: "bills", label: "Tagihan", icon: Bell },
-    { id: "debts", label: "Hutang", icon: HandCoins },
-    { id: "funds", label: "Modal & Untung", icon: Landmark },
-    { id: "analytics", label: "Analitik", icon: BarChart3 },
-    { id: "laporan", label: "Laporan", icon: Share2 },
-  ];
+function Row({ label, value }) {
+  const { dark } = useApp();
   return (
-    <div className="space-y-5 lb-anim">
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {SUBTABS.map((t) => {
-          const Icon = t.icon;
-          const active = subTab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setSubTab(t.id)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap shrink-0 transition-all duration-150"
-              style={{ background: active ? C.jadeSoft : C.surface2, color: active ? C.jade : C.textMuted, border: `1px solid ${active ? C.jade : C.border}` }}
-            >
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
-      </div>
-      {subTab === "transactions" && <TransactionsView {...props} />}
-      {subTab === "items" && <ItemsView {...props} />}
-      {subTab === "budget" && <BudgetView {...props} />}
-      {subTab === "savings" && <SavingsView {...props} />}
-      {subTab === "bills" && <BillsView {...props} />}
-      {subTab === "debts" && <DebtsView {...props} />}
-      {subTab === "funds" && <FundsView {...props} />}
-      {subTab === "analytics" && <AnalyticsView {...props} />}
-      {subTab === "laporan" && <LaporanView {...props} />}
+    <div className="flex items-center justify-between">
+      <span className={cx("text-xs", dark ? "text-slate-400" : "text-slate-500")}>{label}</span>
+      <span className="text-xs font-semibold">{value}</span>
     </div>
   );
 }
 
-/* ---------------------------------------------------------------
-   LAPORAN — generate ringkasan teks & kirim via WhatsApp
-----------------------------------------------------------------*/
-const MONTH_NAMES_ID = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
-const numOnly = (n) => Math.round(n || 0).toLocaleString("id-ID");
+/* ============================================================
+   SALES PAGE
+   ============================================================ */
+function SalesPage() {
+  const { dark, db, setDb, activeStoreId, notify, activeStores } = useApp();
+  const [storeId, setStoreId] = useState(activeStoreId !== "all" ? activeStoreId : activeStores[0]?.id || "");
+  const [items, setItems] = useState([{ id: uid("li"), productId: "", qty: 1 }]);
+  const [discount, setDiscount] = useState(0);
+  const [method, setMethod] = useState("cash");
+  const [cashier, setCashier] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lastSale, setLastSale] = useState(null);
+  const [waOpen, setWaOpen] = useState(false);
 
-function LaporanView({ C, projects, transactions, activeProject, getCat }) {
-  const [phone, setPhone] = useState("");
-  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
-  const [reportProjectId, setReportProjectId] = useState(activeProject !== "all" ? activeProject : (projects[0]?.id || ""));
-  const [modalLabel, setModalLabel] = useState("MODAL");
-  const [modalAmount, setModalAmount] = useState("");
-  const [extraLabel, setExtraLabel] = useState("");
-  const [extraAmount, setExtraAmount] = useState("");
-  const [serahanOverride, setSerahanOverride] = useState("");
+  const store = db.stores.find((s) => s.id === storeId);
+  const products = db.products.filter((p) => p.storeId === storeId && p.status === "active");
 
-  const project = projects.find((p) => p.id === reportProjectId);
+  const lineItems = items.map((li) => {
+    const p = products.find((x) => x.id === li.productId);
+    const total = p ? p.price * li.qty : 0;
+    return { ...li, product: p, total };
+  });
+  const subtotal = lineItems.reduce((a, li) => a + li.total, 0);
+  const grandTotal = Math.max(subtotal - (Number(discount) || 0), 0);
 
-  const dayTx = useMemo(
-    () => transactions.filter((t) => t.projectId === reportProjectId && t.date === reportDate),
-    [transactions, reportProjectId, reportDate]
-  );
+  const addLine = () => setItems((prev) => [...prev, { id: uid("li"), productId: "", qty: 1 }]);
+  const removeLine = (id) => setItems((prev) => prev.filter((x) => x.id !== id));
+  const updateLine = (id, patch) => setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
-  const income = dayTx.filter((t) => t.type === "income");
-  const expense = dayTx.filter((t) => t.type === "expense");
-  const cashTotal = income.filter((t) => t.paymentMethod !== "online").reduce((s, t) => s + t.amount, 0);
-  const onlineTotal = income.filter((t) => t.paymentMethod === "online").reduce((s, t) => s + t.amount, 0);
-  const omset = cashTotal + onlineTotal;
-  const expenseLines = expense.map((t) => ({ label: t.note || (getCat ? getCat(t.category).label : t.category), amount: t.amount }));
-  const totalExpense = expenseLines.reduce((s, l) => s + l.amount, 0);
+  const canSave = storeId && lineItems.some((li) => li.product && li.qty > 0) && cashier.trim();
 
-  const modalNum = Number(String(modalAmount).replace(/[^0-9]/g, "")) || 0;
-  const extraNum = Number(String(extraAmount).replace(/[^0-9]/g, "")) || 0;
-  const autoSerahan = omset - totalExpense - modalNum - extraNum;
-  const serahanNum = serahanOverride !== "" ? (Number(String(serahanOverride).replace(/[^0-9-]/g, "")) || 0) : autoSerahan;
-
-  const reportText = useMemo(() => {
-    const d = new Date(reportDate + "T00:00:00");
-    const tarikh = `${d.getDate()} ${MONTH_NAMES_ID[d.getMonth()]} ${d.getFullYear()}`;
-    const unit = (project?.name || "-").toUpperCase();
-
-    const labelWidth = Math.max(9, ...expenseLines.map((l) => l.label.length), 0);
-    const amtWidth = Math.max(6, ...expenseLines.map((l) => numOnly(l.amount).length), numOnly(totalExpense).length);
-    const expLines = expenseLines.length
-      ? expenseLines.map((l) => `-${l.label.padEnd(labelWidth, " ")}: ${numOnly(l.amount).padStart(amtWidth, " ")}`).join("\n")
-      : "-(Tidak ada pengeluaran)";
-
-    let text = `*Minta Izin Melaporkan*\n\n`;
-    text += `*LAPORAN OMSET PREMIS*\n\n`;
-    text += `_*TARIKH : ${tarikh}*_\n`;
-    text += `_*UNIT  : ${unit}*_\n`;
-    text += "```\n";
-    text += `OMSET    : ${numOnly(omset)}\n\n`;
-    text += `Cash     : ${numOnly(cashTotal)}\n`;
-    text += `Online   : ${numOnly(onlineTotal)}\n`;
-    text += `•••••••••••••••••••••\n`;
-    text += `Rincian Pengeluaran :\n\n`;
-    text += `${expLines}\n\n`;
-    text += `Total Pengeluaran = ${numOnly(totalExpense)}\n`;
-    text += `•••••••••••••••••••••\n`;
-    text += `OMSET = ${numOnly(omset)}\n\n`;
-    text += `P'LUARAN SEMASA = ${numOnly(totalExpense)}\n`;
-    if (modalNum > 0) text += `${modalLabel} = ${numOnly(modalNum)}\n`;
-    if (extraNum > 0 && extraLabel) text += `${extraLabel} = ${numOnly(extraNum)}\n`;
-    text += `\nSERAHAN${project ? " " + project.name.split(" ")[0].toUpperCase() : ""} = ${numOnly(serahanNum)}\n`;
-    text += "```\n";
-    text += `*AMPUN YA ALLAH*`;
-    return text;
-  }, [reportDate, project, omset, cashTotal, onlineTotal, expenseLines, totalExpense, modalNum, modalLabel, extraNum, extraLabel, serahanNum]);
-
-  const sendToWhatsApp = () => {
-    const cleanPhone = phone.replace(/[^0-9]/g, "").replace(/^0/, "62");
-    const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(reportText)}` : `https://wa.me/?text=${encodeURIComponent(reportText)}`;
-    window.open(url, "_blank");
+  const save = () => {
+    if (!canSave) { notify("Lengkapi form terlebih dahulu", "red"); return; }
+    const now = new Date();
+    const txCount = db.sales.filter((s) => s.storeId === storeId && dayKey(s.date) === dayKey(now)).length + 1;
+    const sale = {
+      id: uid("sale"), storeId, date: now.toISOString(),
+      txNumber: `TRX-${storeId.slice(3).toUpperCase()}-${dayKey(now).replace(/-/g, "")}-${String(txCount).padStart(3, "0")}`,
+      items: lineItems.filter((li) => li.product).map((li) => ({ productId: li.product.id, name: li.product.name, qty: li.qty, price: li.product.price, cost: li.product.cost, total: li.total })),
+      subtotal, discount: Number(discount) || 0, total: grandTotal, method, cashier, notes,
+    };
+    setDb((d) => ({
+      ...d,
+      sales: [sale, ...d.sales],
+      products: d.products.map((p) => {
+        const li = sale.items.find((x) => x.productId === p.id);
+        return li ? { ...p, stock: Math.max(p.stock - li.qty, 0) } : p;
+      }),
+    }));
+    setLastSale(sale);
+    setItems([{ id: uid("li"), productId: "", qty: 1 }]);
+    setDiscount(0); setNotes("");
+    notify("Transaksi tersimpan — saldo & keuntungan diperbarui");
   };
 
   return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Laporan Omset" subtitle="Buat laporan harian dan kirim langsung ke WhatsApp" />
-      <div className="grid lg:grid-cols-5 gap-5">
-        <Card C={C} className="lg:col-span-2">
-          <Field label="Unit / Projek" C={C}>
-            <select value={reportProjectId} onChange={(e) => setReportProjectId(e.target.value)} style={inputStyle(C)}>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+    <div className="grid lg:grid-cols-3 gap-4">
+      <Card className="p-4 sm:p-5 lg:col-span-2 space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Toko" required>
+            <Select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <option value="">Pilih toko</option>
+              {activeStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
           </Field>
-          <Field label="Tarikh" C={C}>
-            <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} style={inputStyle(C)} />
+          <Field label="Nama kasir" required>
+            <Input value={cashier} onChange={(e) => setCashier(e.target.value)} placeholder="cth. Rani" />
           </Field>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <Field label="Label" C={C}>
-              <input value={modalLabel} onChange={(e) => setModalLabel(e.target.value)} placeholder="MODAL" style={inputStyle(C)} />
-            </Field>
-            <Field label="Jumlah Modal (Rp)" C={C}>
-              <AmountInput value={modalAmount} onChange={setModalAmount} C={C} />
-            </Field>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className={cx("block text-xs font-semibold", dark ? "text-slate-300" : "text-slate-600")}>Produk / Menu <span className="text-rose-500">*</span></span>
+            <button onClick={addLine} className="text-indigo-500 text-xs font-semibold flex items-center gap-1"><Plus size={13} /> Tambah item</button>
           </div>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <Field label="Label Potongan Lain" C={C}>
-              <input value={extraLabel} onChange={(e) => setExtraLabel(e.target.value)} placeholder="Contoh: KBJIKN PNDDKN" style={inputStyle(C)} />
-            </Field>
-            <Field label="Jumlah (Rp)" C={C}>
-              <AmountInput value={extraAmount} onChange={setExtraAmount} C={C} />
-            </Field>
-          </div>
-          <Field label="Serahan (bisa diubah manual)" C={C}>
-            <input value={serahanOverride} onChange={(e) => setSerahanOverride(e.target.value)} placeholder={numOnly(autoSerahan)} style={inputStyle(C)} />
-          </Field>
-          <Field label="Nomor WhatsApp Tujuan (opsional)" C={C}>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Contoh: 08123456789" style={inputStyle(C)} />
-          </Field>
-          <p className="text-xs mb-4" style={{ color: C.textFaint }}>Kosongkan nomor untuk memilih kontak langsung di WhatsApp.</p>
-          <button onClick={sendToWhatsApp} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: "#25D366", color: "#08130F" }}>
-            <Share2 size={16} /> Kirim ke WhatsApp
-          </button>
-        </Card>
-        <Card C={C} className="lg:col-span-3">
-          <div className="text-xs font-medium mb-2" style={{ color: C.textMuted }}>Pratinjau Laporan</div>
-          <pre className="text-xs whitespace-pre-wrap rounded-xl p-4" style={{ background: C.surface2, color: C.text, fontFamily: "JetBrains Mono, monospace", lineHeight: 1.6, maxHeight: 480, overflowY: "auto" }}>{reportText}</pre>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function ProjectsView({ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }) {
-  return (
-    <div className="space-y-6 lb-anim">
-      <ViewHeader C={C} title="Profil Projek" subtitle="Semua kawasan pengembangan yang sedang berjalan" action={isAdmin ? { label: "Tambah Projek", onClick: () => setProjModal("new") } : null} />
-      {projects.length === 0 && <div className="text-sm" style={{ color: C.textMuted }}>Belum ada data projek. Klik tombol tambah projek untuk mulai.</div>}
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {projects.map((p) => {
-          const tx = transactions.filter((t) => t.projectId === p.id);
-          const spent = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-          const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-          const balance = income - spent;
-
-          return (
-            <Card key={p.id} C={C} pad="p-0" className="overflow-hidden group transition-transform duration-200 hover:-translate-y-1" style={{ position: "relative" }}>
-              {isAdmin && (
-                <button onClick={(e) => { e.stopPropagation(); setProjModal(p); }} className="absolute top-3 right-3 z-10 p-1.5 rounded-lg transition-transform duration-150 hover:scale-110" style={{ background: "rgba(0,0,0,0.35)", color: "#fff" }} title="Edit projek"><Pencil size={13} /></button>
-              )}
-              <div onClick={() => { setActiveProject(p.id); setTab("dashboard"); }} className="cursor-pointer">
-                <div className="relative h-20 flex items-end p-4" style={{ background: `linear-gradient(135deg, ${p.color}30, ${p.color}08)` }}>
-                  <ContourLines color={p.color} opacity={0.3} />
-                  <div className="relative w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: p.color }}><Building2 size={18} color="#08130F" /></div>
-                </div>
-                <div className="p-4">
-                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: C.text }}>{p.name}</div>
-                  <div className="flex items-center gap-1 text-xs mt-0.5 mb-3" style={{ color: C.textMuted }}>
-                    <MapPin size={11} />{p.location}
-                  </div>
-                  <p className="text-xs mb-4" style={{ color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</p>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs mb-3">
-                    <div>
-                      <div style={{ color: C.textMuted }}>Pemasukan</div>
-                      <div className="font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(income)}</div>
-                    </div>
-                    <div>
-                      <div style={{ color: C.textMuted }}>Pengeluaran</div>
-                      <div className="font-semibold" style={{ color: C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(spent)}</div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                    <span style={{ color: C.textMuted }}>Saldo</span>
-                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: balance >= 0 ? C.jade : C.coral }}>{fmtIDR(balance)}</span>
-                  </div>
-
-                  <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}`, color: C.textMuted }}>
-                    <span>PJ: {p.manager}</span>
-                    <span>{fmtIDR(p.budget)}/bln</span>
-                  </div>
-                </div>
+          <div className="space-y-2">
+            {lineItems.map((li) => (
+              <div key={li.id} className="flex items-center gap-2">
+                <Select value={li.productId} onChange={(e) => updateLine(li.id, { productId: e.target.value })} className="flex-1">
+                  <option value="">Pilih produk</option>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.name} — {fmtIDR(p.price)}</option>)}
+                </Select>
+                <Input type="number" min={1} value={li.qty} onChange={(e) => updateLine(li.id, { qty: Number(e.target.value) || 1 })} className="w-16 text-center" />
+                <span className="text-xs font-semibold tabular w-20 text-right shrink-0">{fmtIDRshort(li.total)}</span>
+                <button onClick={() => removeLine(li.id)} className="p-1.5 text-slate-400 hover:text-rose-500 shrink-0"><Trash2 size={15} /></button>
               </div>
-            </Card>
-          );
-        })}
+            ))}
+          </div>
+          {!storeId && <p className="text-[11px] text-amber-500 mt-2">Pilih toko dahulu untuk melihat daftar produk.</p>}
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Diskon (Rp)"><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(e.target.value)} /></Field>
+          <Field label="Catatan"><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opsional" /></Field>
+        </div>
+
+        <div>
+          <span className={cx("block text-xs font-semibold mb-2", dark ? "text-slate-300" : "text-slate-600")}>Metode pembayaran</span>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {PAYMENT_METHODS.map((m) => (
+              <button key={m.id} onClick={() => setMethod(m.id)}
+                className={cx("flex flex-col items-center gap-1 p-2.5 rounded-xl border text-[11px] font-semibold transition",
+                  method === m.id ? "border-indigo-500 bg-indigo-500/10 text-indigo-500" : dark ? "border-slate-700 text-slate-400" : "border-slate-200 text-slate-500")}>
+                <m.icon size={16} /> {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <div className="space-y-4">
+        <Card className="p-4 sm:p-5">
+          <p className="font-display font-bold text-sm mb-3">Ringkasan</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className={dark ? "text-slate-400" : "text-slate-500"}>Subtotal</span><span className="tabular font-medium">{fmtIDR(subtotal)}</span></div>
+            <div className="flex justify-between"><span className={dark ? "text-slate-400" : "text-slate-500"}>Diskon</span><span className="tabular font-medium text-rose-500">-{fmtIDR(discount)}</span></div>
+            <div className={cx("flex justify-between pt-2 border-t", dark ? "border-slate-700" : "border-slate-100")}>
+              <span className="font-display font-bold">Grand Total</span><span className="font-display font-extrabold text-emerald-500 tabular">{fmtIDR(grandTotal)}</span>
+            </div>
+          </div>
+          <Btn variant="green" className="w-full mt-4" onClick={save} disabled={!canSave}>
+            <CheckCircle2 size={16} /> Simpan Transaksi
+          </Btn>
+        </Card>
+
+        {lastSale && (
+          <Card className="p-4 sm:p-5 animate-fadeUp">
+            <div className="flex items-center gap-2 mb-2 text-emerald-500"><CheckCircle2 size={16} /><p className="text-sm font-semibold">Transaksi tersimpan</p></div>
+            <p className={cx("text-xs mb-3", dark ? "text-slate-400" : "text-slate-500")}>{lastSale.txNumber} · {fmtIDR(lastSale.total)}</p>
+            <Btn variant="green" size="sm" className="w-full" onClick={() => setWaOpen(true)}><Send size={14} /> Kirim Laporan WhatsApp</Btn>
+          </Card>
+        )}
+      </div>
+
+      <Modal open={waOpen} onClose={() => setWaOpen(false)} title="Kirim Laporan WhatsApp">
+        {lastSale && (
+          <div className="space-y-4">
+            <pre className={cx("text-xs whitespace-pre-wrap p-3 rounded-xl border font-body", dark ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+              {buildWaMessage({ storeName: store?.name, date: lastSale.date, sales: [lastSale], expenses: [], handoverAmount: 0 })}
+            </pre>
+            <WhatsAppSendRow message={buildWaMessage({ storeName: store?.name, date: lastSale.date, sales: [lastSale], expenses: [], handoverAmount: 0 })} store={store} />
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/* ============================================================
+   EXPENSE PAGE
+   ============================================================ */
+function ExpensePage() {
+  const { db, setDb, activeStoreId, notify, activeStores } = useApp();
+  const [storeId, setStoreId] = useState(activeStoreId !== "all" ? activeStoreId : activeStores[0]?.id || "");
+  const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("cash");
+  const [description, setDescription] = useState("");
+  const [by, setBy] = useState("");
+  const [notes, setNotes] = useState("");
+  const [proof, setProof] = useState(null);
+  const fileRef = useRef(null);
+
+  const canSave = storeId && Number(amount) > 0 && by.trim();
+
+  const onFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => setProof(reader.result);
+    reader.readAsDataURL(f);
+  };
+
+  const save = () => {
+    if (!canSave) { notify("Lengkapi form terlebih dahulu", "red"); return; }
+    const exp = { id: uid("exp"), storeId, date: new Date().toISOString(), category, amount: Number(amount), method, description, by, notes, proof };
+    setDb((d) => ({ ...d, expenses: [exp, ...d.expenses] }));
+    setAmount(""); setDescription(""); setNotes(""); setProof(null); setBy("");
+    notify("Pengeluaran tersimpan — saldo diperbarui", "red");
+  };
+
+  return (
+    <div className="max-w-xl">
+      <Card className="p-4 sm:p-5 space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Toko" required>
+            <Select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <option value="">Pilih toko</option>
+              {activeStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Kategori" required>
+            <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+              {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Nominal (Rp)" required><Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></Field>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Metode pembayaran">
+            <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+              {PAYMENT_METHODS.slice(0, 2).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Dilakukan oleh" required><Input value={by} onChange={(e) => setBy(e.target.value)} placeholder="Nama" /></Field>
+        </div>
+        <Field label="Deskripsi"><Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Keterangan pengeluaran" /></Field>
+        <Field label="Bukti pembayaran / nota">
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+          {proof ? (
+            <div className="relative w-28">
+              <img src={proof} className="w-28 h-28 object-cover rounded-xl border" alt="bukti" />
+              <button onClick={() => setProof(null)} className="absolute -top-2 -right-2 bg-rose-600 text-white rounded-full p-1"><X size={12} /></button>
+            </div>
+          ) : (
+            <button onClick={() => fileRef.current?.click()} className="w-full border-2 border-dashed rounded-xl py-6 flex flex-col items-center gap-1.5 text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition">
+              <ImagePlus size={20} /> <span className="text-xs font-medium">Unggah foto nota</span>
+            </button>
+          )}
+        </Field>
+        <Field label="Catatan"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        <Btn variant="red" className="w-full" onClick={save} disabled={!canSave}><CheckCircle2 size={16} /> Simpan Pengeluaran</Btn>
+      </Card>
+    </div>
+  );
+}
+
+/* ============================================================
+   HANDOVER PAGE
+   ============================================================ */
+function HandoverPage() {
+  const { dark, db, setDb, activeStoreId, notify, activeStores } = useApp();
+  const [storeId, setStoreId] = useState(activeStoreId !== "all" ? activeStoreId : activeStores[0]?.id || "");
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState(HANDOVER_TYPES[0]);
+  const [by, setBy] = useState("");
+  const [receivedBy, setReceivedBy] = useState("");
+  const [method, setMethod] = useState("cash");
+  const [notes, setNotes] = useState("");
+
+  const store = db.stores.find((s) => s.id === storeId);
+  const todaySales = db.sales.filter((s) => s.storeId === storeId && dayKey(s.date) === dayKey(new Date()));
+  const todayExpenses = db.expenses.filter((e) => e.storeId === storeId && dayKey(e.date) === dayKey(new Date()));
+  const todayHandovers = db.handovers.filter((h) => h.storeId === storeId && dayKey(h.date) === dayKey(new Date()));
+  const todayProfit = todaySales.reduce((a, s) => a + s.total, 0) - todayExpenses.reduce((a, e) => a + e.amount, 0);
+  const todayHanded = todayHandovers.reduce((a, h) => a + h.amount, 0);
+  const remaining = todayProfit - todayHanded;
+
+  const canSave = storeId && Number(amount) > 0 && by.trim() && receivedBy.trim();
+  const save = () => {
+    if (!canSave) { notify("Lengkapi form terlebih dahulu", "red"); return; }
+    const hd = { id: uid("hd"), storeId, date: new Date().toISOString(), amount: Number(amount), type, by, receivedBy, method, notes, proof: null };
+    setDb((d) => ({ ...d, handovers: [hd, ...d.handovers] }));
+    setAmount(""); setNotes(""); setBy(""); setReceivedBy("");
+    notify("Serahan tercatat");
+  };
+
+  const allStoreStatus = activeStores.map((s) => {
+    const sales = db.sales.filter((x) => x.storeId === s.id && dayKey(x.date) === dayKey(new Date()));
+    const exp = db.expenses.filter((x) => x.storeId === s.id && dayKey(x.date) === dayKey(new Date()));
+    const hd = db.handovers.filter((x) => x.storeId === s.id && dayKey(x.date) === dayKey(new Date()));
+    const profit = sales.reduce((a, x) => a + x.total, 0) - exp.reduce((a, x) => a + x.amount, 0);
+    const handed = hd.reduce((a, x) => a + x.amount, 0);
+    let status = "red"; if (handed >= profit && profit > 0) status = "green"; else if (handed > 0) status = "yellow";
+    return { store: s, profit, handed, remaining: Math.max(profit - handed, 0), status };
+  });
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-4">
+      <Card className="p-4 sm:p-5 lg:col-span-2 space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Toko" required>
+            <Select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <option value="">Pilih toko</option>
+              {activeStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Jenis" required>
+            <Select value={type} onChange={(e) => setType(e.target.value)}>
+              {HANDOVER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Nominal (Rp)" required><Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Diserahkan oleh" required><Input value={by} onChange={(e) => setBy(e.target.value)} placeholder={store?.pic || "Nama"} /></Field>
+          <Field label="Diterima oleh" required><Input value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} placeholder={store?.owner || "Nama"} /></Field>
+        </div>
+        <Field label="Metode">
+          <div className="flex gap-2">
+            {["cash", "transfer"].map((m) => (
+              <button key={m} onClick={() => setMethod(m)} className={cx("flex-1 py-2.5 rounded-xl border text-xs font-semibold capitalize", method === m ? "border-indigo-500 bg-indigo-500/10 text-indigo-500" : dark ? "border-slate-700" : "border-slate-200")}>{m}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Catatan"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        <Btn variant="primary" className="w-full" onClick={save} disabled={!canSave}><HandCoins size={16} /> Catat Serahan</Btn>
+      </Card>
+
+      <div className="space-y-4">
+        {storeId && (
+          <Card className="p-4 sm:p-5">
+            <p className="font-display font-bold text-sm mb-3">Ringkasan Hari Ini</p>
+            <Row label="Keuntungan" value={fmtIDR(todayProfit)} />
+            <div className="h-2" />
+            <Row label="Sudah diserahkan" value={fmtIDR(todayHanded)} />
+            <div className="h-2" />
+            <Row label="Sisa" value={<span className={remaining > 0 ? "text-amber-500" : "text-emerald-500"}>{fmtIDR(remaining)}</span>} />
+          </Card>
+        )}
+        <Card className="p-4 sm:p-5">
+          <p className="font-display font-bold text-sm mb-3">Status Serahan Semua Toko</p>
+          <div className="space-y-2.5">
+            {allStoreStatus.map((s) => (
+              <div key={s.store.id} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5 font-medium truncate">
+                  {s.status === "green" ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : s.status === "yellow" ? <Circle size={14} className="text-amber-500 fill-amber-500 shrink-0" /> : <AlertCircle size={14} className="text-rose-500 shrink-0" />}
+                  {s.store.name}
+                </span>
+                <span className="tabular font-semibold">{fmtIDRshort(s.remaining)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
     </div>
   );
 }
 
-function TransactionsView({ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat, getProject }) {
+/* ============================================================
+   HISTORY PAGE
+   ============================================================ */
+function HistoryPage() {
+  const { dark, db, setDb, activeStoreId, notify } = useApp();
+  const [tab, setTab] = useState("sales");
   const [q, setQ] = useState("");
-  const [filterType, setFilterType] = useState("all");
-  const rows = useMemo(() => {
-    return transactions
-      .filter((t) => activeProject === "all" || t.projectId === activeProject)
-      .filter((t) => filterType === "all" || t.type === filterType)
-      .filter((t) => t.note.toLowerCase().includes(q.toLowerCase()))
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, activeProject, filterType, q]);
+  const [storeFilter, setStoreFilter] = useState(activeStoreId);
+  const [methodFilter, setMethodFilter] = useState("all");
+  const [catFilter, setCatFilter] = useState("all");
+  const [period, setPeriod] = useState("month");
+  const [custom, setCustom] = useState({ from: dayKey(addDays(new Date(), -30)), to: dayKey(new Date()) });
+  const [detail, setDetail] = useState(null);
+
+  const range = periodRange(period, custom);
+  const storeName = (id) => db.stores.find((s) => s.id === id)?.name || "-";
+
+  const salesRows = useMemo(() => db.sales.filter((s) =>
+    (storeFilter === "all" || s.storeId === storeFilter) &&
+    inRange(s.date, range) &&
+    (methodFilter === "all" || s.method === methodFilter) &&
+    (q === "" || s.txNumber.toLowerCase().includes(q.toLowerCase()) || s.cashier.toLowerCase().includes(q.toLowerCase()))
+  ).sort((a, b) => new Date(b.date) - new Date(a.date)), [db.sales, storeFilter, range, methodFilter, q]);
+
+  const expenseRows = useMemo(() => db.expenses.filter((e) =>
+    (storeFilter === "all" || e.storeId === storeFilter) &&
+    inRange(e.date, range) &&
+    (catFilter === "all" || e.category === catFilter) &&
+    (q === "" || e.description.toLowerCase().includes(q.toLowerCase()) || e.by.toLowerCase().includes(q.toLowerCase()))
+  ).sort((a, b) => new Date(b.date) - new Date(a.date)), [db.expenses, storeFilter, range, catFilter, q]);
+
+  const handoverRows = useMemo(() => db.handovers.filter((h) =>
+    (storeFilter === "all" || h.storeId === storeFilter) && inRange(h.date, range) &&
+    (q === "" || h.by.toLowerCase().includes(q.toLowerCase()) || h.receivedBy.toLowerCase().includes(q.toLowerCase()))
+  ).sort((a, b) => new Date(b.date) - new Date(a.date)), [db.handovers, storeFilter, range, q]);
+
+  const removeSale = (id) => { if (confirm("Hapus transaksi ini?")) { setDb((d) => ({ ...d, sales: d.sales.filter((s) => s.id !== id) })); notify("Transaksi dihapus", "red"); } };
+  const removeExpense = (id) => { if (confirm("Hapus pengeluaran ini?")) { setDb((d) => ({ ...d, expenses: d.expenses.filter((s) => s.id !== id) })); notify("Pengeluaran dihapus", "red"); } };
+  const removeHandover = (id) => { if (confirm("Hapus serahan ini?")) { setDb((d) => ({ ...d, handovers: d.handovers.filter((s) => s.id !== id) })); notify("Serahan dihapus", "red"); } };
 
   return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Riwayat Transaksi" subtitle="Seluruh catatan pemasukan dan pengeluaran" action={{ label: "Tambah Transaksi", onClick: () => setTxModal("new") }} />
-      <div className="flex flex-col sm:flex-row gap-3 justify-between">
-        <div className="flex gap-2 w-full sm:w-auto">
-          {["all", "income", "expense"].map((f) => (
-            <button key={f} onClick={() => setFilterType(f)} className="px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex-1 sm:flex-none" style={{ background: filterType === f ? C.jadeSoft : C.surface2, color: filterType === f ? C.jade : C.textMuted, border: `1px solid ${C.border}` }}>
-              {f === "all" ? "Semua" : f === "income" ? "Pemasukan" : "Pengeluaran"}
-            </button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 justify-between">
+        <div className={cx("flex p-1 rounded-xl", dark ? "bg-slate-800" : "bg-slate-100")}>
+          {[["sales", "Penjualan"], ["expense", "Pengeluaran"], ["handover", "Serahan"]].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={cx("px-3.5 py-1.5 rounded-lg text-xs font-semibold transition", tab === id ? "bg-indigo-600 text-white shadow" : dark ? "text-slate-300" : "text-slate-600")}>{label}</button>
+          ))}
+        </div>
+        <PeriodFilter period={period} setPeriod={setPeriod} custom={custom} setCustom={setCustom} />
+      </div>
+
+      <Card className="p-3 sm:p-4">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search size={14} className={cx("absolute left-3 top-1/2 -translate-y-1/2", dark ? "text-slate-500" : "text-slate-400")} />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari…" className="!pl-9" />
+          </div>
+          <Select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="w-40"><option value="all">Semua Toko</option>{db.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
+          {tab === "sales" && <Select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="w-36"><option value="all">Semua Metode</option>{PAYMENT_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</Select>}
+          {tab === "expense" && <Select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="w-40"><option value="all">Semua Kategori</option>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}
+          <Btn variant="ghost" size="sm" onClick={() => exportCSV(tab, tab === "sales" ? salesRows : tab === "expense" ? expenseRows : handoverRows, storeName)}><Download size={13} /> Export</Btn>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        {tab === "sales" && (
+          salesRows.length === 0 ? <EmptyState icon={ShoppingCart} title="Belum ada transaksi" desc="Transaksi penjualan pada periode ini akan muncul di sini." /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={cx("text-[11px] uppercase tracking-wide", dark ? "text-slate-400 bg-slate-800/50" : "text-slate-500 bg-slate-50")}>
+                  <tr><Th>No. Transaksi</Th><Th>Toko</Th><Th>Tanggal</Th><Th>Metode</Th><Th className="text-right">Total</Th><Th className="text-right">Aksi</Th></tr>
+                </thead>
+                <tbody>
+                  {salesRows.map((s) => (
+                    <tr key={s.id} className={cx("border-t", dark ? "border-slate-800 hover:bg-slate-800/40" : "border-slate-100 hover:bg-slate-50")}>
+                      <Td className="font-medium">{s.txNumber}</Td>
+                      <Td>{storeName(s.storeId)}</Td>
+                      <Td>{fmtDateTime(s.date)}</Td>
+                      <Td><Badge tone="indigo">{PAYMENT_METHODS.find((m) => m.id === s.method)?.label}</Badge></Td>
+                      <Td className="text-right font-semibold tabular text-emerald-500">{fmtIDR(s.total)}</Td>
+                      <Td className="text-right"><RowActions onView={() => setDetail({ type: "sales", data: s })} onDelete={() => removeSale(s.id)} /></Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+        {tab === "expense" && (
+          expenseRows.length === 0 ? <EmptyState icon={Receipt} title="Belum ada pengeluaran" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={cx("text-[11px] uppercase tracking-wide", dark ? "text-slate-400 bg-slate-800/50" : "text-slate-500 bg-slate-50")}>
+                  <tr><Th>Kategori</Th><Th>Toko</Th><Th>Tanggal</Th><Th>Oleh</Th><Th className="text-right">Nominal</Th><Th className="text-right">Aksi</Th></tr>
+                </thead>
+                <tbody>
+                  {expenseRows.map((e) => (
+                    <tr key={e.id} className={cx("border-t", dark ? "border-slate-800 hover:bg-slate-800/40" : "border-slate-100 hover:bg-slate-50")}>
+                      <Td className="font-medium">{e.category}</Td>
+                      <Td>{storeName(e.storeId)}</Td>
+                      <Td>{fmtDateTime(e.date)}</Td>
+                      <Td>{e.by}</Td>
+                      <Td className="text-right font-semibold tabular text-rose-500">-{fmtIDR(e.amount)}</Td>
+                      <Td className="text-right"><RowActions onView={() => setDetail({ type: "expense", data: e })} onDelete={() => removeExpense(e.id)} /></Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+        {tab === "handover" && (
+          handoverRows.length === 0 ? <EmptyState icon={HandCoins} title="Belum ada serahan" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={cx("text-[11px] uppercase tracking-wide", dark ? "text-slate-400 bg-slate-800/50" : "text-slate-500 bg-slate-50")}>
+                  <tr><Th>Jenis</Th><Th>Toko</Th><Th>Tanggal</Th><Th>Diserahkan / Diterima</Th><Th className="text-right">Nominal</Th><Th className="text-right">Aksi</Th></tr>
+                </thead>
+                <tbody>
+                  {handoverRows.map((h) => (
+                    <tr key={h.id} className={cx("border-t", dark ? "border-slate-800 hover:bg-slate-800/40" : "border-slate-100 hover:bg-slate-50")}>
+                      <Td className="font-medium">{h.type}</Td>
+                      <Td>{storeName(h.storeId)}</Td>
+                      <Td>{fmtDateTime(h.date)}</Td>
+                      <Td>{h.by} → {h.receivedBy}</Td>
+                      <Td className="text-right font-semibold tabular text-indigo-500">{fmtIDR(h.amount)}</Td>
+                      <Td className="text-right"><RowActions onView={() => setDetail({ type: "handover", data: h })} onDelete={() => removeHandover(h.id)} /></Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+      </Card>
+
+      <Modal open={!!detail} onClose={() => setDetail(null)} title="Detail Transaksi" wide>
+        {detail?.type === "sales" && (
+          <div className="space-y-3 text-sm">
+            <Row label="No. Transaksi" value={detail.data.txNumber} />
+            <Row label="Toko" value={storeName(detail.data.storeId)} />
+            <Row label="Tanggal" value={fmtDateTime(detail.data.date)} />
+            <Row label="Kasir" value={detail.data.cashier} />
+            <div className={cx("rounded-xl border p-3 mt-2", dark ? "border-slate-700" : "border-slate-200")}>
+              {detail.data.items.map((it, i) => (
+                <div key={i} className="flex justify-between text-xs py-1"><span>{it.qty}× {it.name}</span><span className="tabular">{fmtIDR(it.total)}</span></div>
+              ))}
+            </div>
+            <Row label="Diskon" value={fmtIDR(detail.data.discount)} />
+            <Row label="Total" value={<span className="text-emerald-500 font-bold">{fmtIDR(detail.data.total)}</span>} />
+            <Row label="Metode" value={PAYMENT_METHODS.find((m) => m.id === detail.data.method)?.label} />
+          </div>
+        )}
+        {detail?.type === "expense" && (
+          <div className="space-y-3 text-sm">
+            <Row label="Kategori" value={detail.data.category} />
+            <Row label="Toko" value={storeName(detail.data.storeId)} />
+            <Row label="Tanggal" value={fmtDateTime(detail.data.date)} />
+            <Row label="Nominal" value={<span className="text-rose-500 font-bold">{fmtIDR(detail.data.amount)}</span>} />
+            <Row label="Dilakukan oleh" value={detail.data.by} />
+            <Row label="Deskripsi" value={detail.data.description || "-"} />
+            {detail.data.proof && <img src={detail.data.proof} className="rounded-xl border w-full max-w-[200px]" alt="bukti" />}
+          </div>
+        )}
+        {detail?.type === "handover" && (
+          <div className="space-y-3 text-sm">
+            <Row label="Jenis" value={detail.data.type} />
+            <Row label="Toko" value={storeName(detail.data.storeId)} />
+            <Row label="Tanggal" value={fmtDateTime(detail.data.date)} />
+            <Row label="Nominal" value={<span className="text-indigo-500 font-bold">{fmtIDR(detail.data.amount)}</span>} />
+            <Row label="Diserahkan oleh" value={detail.data.by} />
+            <Row label="Diterima oleh" value={detail.data.receivedBy} />
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+function Th({ children, className }) { return <th className={cx("text-left font-semibold px-4 py-2.5", className)}>{children}</th>; }
+function Td({ children, className }) { return <td className={cx("px-4 py-2.5 align-middle", className)}>{children}</td>; }
+function RowActions({ onView, onDelete }) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <button onClick={onView} className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500"><Edit2 size={13} /></button>
+      <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-500"><Trash2 size={13} /></button>
+    </div>
+  );
+}
+
+function exportCSV(kind, rows, storeName) {
+  let header = [], lines = [];
+  if (kind === "sales") {
+    header = ["No Transaksi", "Toko", "Tanggal", "Kasir", "Metode", "Subtotal", "Diskon", "Total"];
+    lines = rows.map((s) => [s.txNumber, storeName(s.storeId), fmtDateTime(s.date), s.cashier, s.method, s.subtotal, s.discount, s.total]);
+  } else if (kind === "expense") {
+    header = ["Kategori", "Toko", "Tanggal", "Oleh", "Metode", "Nominal", "Deskripsi"];
+    lines = rows.map((e) => [e.category, storeName(e.storeId), fmtDateTime(e.date), e.by, e.method, e.amount, e.description]);
+  } else {
+    header = ["Jenis", "Toko", "Tanggal", "Diserahkan Oleh", "Diterima Oleh", "Metode", "Nominal"];
+    lines = rows.map((h) => [h.type, storeName(h.storeId), fmtDateTime(h.date), h.by, h.receivedBy, h.method, h.amount]);
+  }
+  const csv = [header, ...lines].map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `toko-finance-${kind}-${dayKey(new Date())}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   REPORTS PAGE
+   ============================================================ */
+function ReportsPage() {
+  const { dark, db, activeStoreId } = useApp();
+  const [tab, setTab] = useState("daily");
+  const [date, setDate] = useState(dayKey(new Date()));
+  const [month, setMonth] = useState(new Date().getMonth());
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [storeId, setStoreId] = useState(activeStoreId !== "all" ? activeStoreId : db.stores[0]?.id);
+  const [waOpen, setWaOpen] = useState(false);
+
+  const store = db.stores.find((s) => s.id === storeId);
+  const dayRange = [startOfDay(new Date(date)), endOfDay(new Date(date))];
+  const daySales = db.sales.filter((s) => s.storeId === storeId && inRange(s.date, dayRange));
+  const dayExpenses = db.expenses.filter((e) => e.storeId === storeId && inRange(e.date, dayRange));
+  const dayHandovers = db.handovers.filter((h) => h.storeId === storeId && inRange(h.date, dayRange));
+  const dayIncome = daySales.reduce((a, s) => a + s.total, 0);
+  const dayExp = dayExpenses.reduce((a, e) => a + e.amount, 0);
+  const dayProfit = dayIncome - dayExp;
+  const dayHanded = dayHandovers.reduce((a, h) => a + h.amount, 0);
+
+  const monthRange = [startOfDay(new Date(year, month, 1)), endOfDay(new Date(year, month + 1, 0))];
+  const prevMonthRange = [startOfDay(new Date(year, month - 1, 1)), endOfDay(new Date(year, month, 0))];
+  const mSales = db.sales.filter((s) => s.storeId === storeId && inRange(s.date, monthRange));
+  const mExpenses = db.expenses.filter((e) => e.storeId === storeId && inRange(e.date, monthRange));
+  const mHandovers = db.handovers.filter((h) => h.storeId === storeId && inRange(h.date, monthRange));
+  const pSales = db.sales.filter((s) => s.storeId === storeId && inRange(s.date, prevMonthRange));
+  const pExpenses = db.expenses.filter((e) => e.storeId === storeId && inRange(e.date, prevMonthRange));
+  const mIncome = mSales.reduce((a, s) => a + s.total, 0), mExp = mExpenses.reduce((a, e) => a + e.amount, 0);
+  const pIncome = pSales.reduce((a, s) => a + s.total, 0), pExp = pExpenses.reduce((a, e) => a + e.amount, 0);
+  const mProfit = mIncome - mExp, pProfit = pIncome - pExp;
+  const growth = pProfit !== 0 ? (((mProfit - pProfit) / Math.abs(pProfit)) * 100).toFixed(1) : "—";
+
+  const consolidated = db.stores.map((s) => {
+    const ss = db.sales.filter((x) => x.storeId === s.id && inRange(x.date, monthRange));
+    const se = db.expenses.filter((x) => x.storeId === s.id && inRange(x.date, monthRange));
+    const income = ss.reduce((a, x) => a + x.total, 0), exp = se.reduce((a, x) => a + x.amount, 0);
+    return { store: s, income, expense: exp, profit: income - exp };
+  });
+
+  const doPrint = () => window.print();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 justify-between">
+        <div className={cx("flex p-1 rounded-xl", dark ? "bg-slate-800" : "bg-slate-100")}>
+          {[["daily", "Harian"], ["monthly", "Bulanan"], ["consolidated", "Semua Toko"]].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={cx("px-3.5 py-1.5 rounded-lg text-xs font-semibold transition", tab === id ? "bg-indigo-600 text-white shadow" : dark ? "text-slate-300" : "text-slate-600")}>{label}</button>
           ))}
         </div>
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" color={C.textMuted} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari..." style={{ ...inputStyle(C), paddingLeft: 34 }} />
-          </div>
-          <button onClick={onManageCat} className="px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5" style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}` }}>
-            <Tag size={15} /> <span className="hidden sm:inline">Kategori</span>
-          </button>
+          <Btn variant="ghost" size="sm" onClick={doPrint}><Printer size={13} /> Cetak / PDF</Btn>
         </div>
       </div>
-      <Card C={C} pad="p-0">
-        {rows.length === 0 && <div className="p-8 text-center text-sm" style={{ color: C.textMuted }}>Tidak ada transaksi ditemukan.</div>}
-        {rows.map((t, i) => {
-          const cat = getCat(t.category);
-          const Icon = isValidIcon(cat.icon) ? cat.icon : Tag;
-          return (
-            <div key={t.id} className="lb-row flex items-center gap-3 px-5 py-3.5 transition-colors duration-150" style={{ borderTop: i === 0 ? "none" : `1px solid ${C.borderSoft}` }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: t.type === "income" ? C.jadeSoft : `${cat.color}22` }}>
-                {t.type === "income" ? <TrendingUp size={15} color={C.jade} /> : <Icon size={15} color={cat.color} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate" style={{ color: C.text }}>{t.note}</div>
-                <div className="text-xs flex items-center gap-1.5 flex-wrap" style={{ color: C.textMuted }}>
-                  <span style={{ color: projectColor(t.projectId) }}>●</span>
-                  <span>{projectName(t.projectId)}</span>
-                  <span>·</span>
-                  <span>{fmtDate(t.date)}</span>
-                  <span>·</span>
-                  <span>{t.type === "expense" ? cat.label : "Pemasukan"}</span>
-                  {t.type === "income" && t.splitModal > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: `${C.blue}22`, color: C.blue }}>
-                      Modal {fmtIDR(t.splitModal)}
-                    </span>
-                  )}
-                  {t.type === "income" && t.splitProfit != null && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: C.jadeSoft, color: C.jade }}>
-                      Untung {fmtIDR(t.splitProfit)}
-                    </span>
-                  )}
-                  {t.type === "expense" && t.fundSource && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={t.fundSource === "modal" ? { background: `${C.blue}22`, color: C.blue } : { background: C.jadeSoft, color: C.jade }}>
-                      Dari {t.fundSource === "modal" ? "Modal" : "Keuntungan"}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: t.type === "income" ? C.jade : C.text }}>
-                {t.type === "income" ? "+" : "-"}{fmtIDR(t.amount)}
-              </div>
-              {isAdmin && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => setTxModal(t)} className="p-1.5 rounded-md transition-opacity" style={{ color: C.textMuted }} title="Edit"><Pencil size={14} /></button>
-                  <button onClick={() => setTransactions((prev) => prev.filter((x) => x.id !== t.id))} className="p-1.5 rounded-md transition-opacity" style={{ color: C.textMuted }} title="Hapus"><Trash2 size={14} /></button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </Card>
-    </div>
-  );
-}
 
-function BudgetView({ C, projects, transactions, thisMonthKey, categories, activeProject }) {
-  const shownProjects = activeProject === "all" ? projects : projects.filter((p) => p.id === activeProject);
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Anggaran Bulanan" subtitle={`Realisasi vs anggaran untuk ${monthLabel(thisMonthKey)}`} />
-      {shownProjects.length === 0 && <div className="text-sm" style={{ color: C.textMuted }}>Belum ada data projek.</div>}
-      <div className="grid lg:grid-cols-2 gap-5">
-        {shownProjects.map((p) => {
-          const tx = transactions.filter((t) => t.projectId === p.id && t.type === "expense" && monthKey(t.date) === thisMonthKey);
-          const spent = tx.reduce((s, t) => s + t.amount, 0);
-          const pct = p.budget ? (spent / p.budget) * 100 : 0;
-          const byCat = {};
-          tx.forEach((t) => { byCat[t.category] = (byCat[t.category] || 0) + t.amount; });
-          const catRows = categories.map((c) => ({ ...c, value: byCat[c.id] || 0 })).filter((c) => c.value > 0).sort((a, b) => b.value - a.value);
-          return (
-            <Card key={p.id} C={C}>
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: p.color }} />
-                  <span className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{p.name}</span>
-                </div>
-                <Badge C={C} tone={pct > 90 ? "coral" : pct > 70 ? "gold" : "jade"}>{pct.toFixed(0)}%</Badge>
-              </div>
-              <div className="flex items-baseline justify-between text-sm mb-2" style={{ color: C.textMuted }}>
-                <span style={{ fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(spent)}</span><span>dari {fmtIDR(p.budget)}</span>
-              </div>
-              <ProgressBar pct={pct} color={pct > 90 ? C.coral : pct > 70 ? C.gold : C.jade} C={C} height={10} />
-              <div className="mt-4 space-y-2.5">
-                {catRows.length === 0 && <div className="text-xs" style={{ color: C.textMuted }}>Belum ada pengeluaran bulan ini.</div>}
-                {catRows.map((c) => {
-                  const Icon = isValidIcon(c.icon) ? c.icon : Tag;
-                  const catPct = p.budget ? (c.value / p.budget) * 100 : 0;
-                  return (
-                    <div key={c.id}>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="flex items-center gap-1.5" style={{ color: C.textMuted }}><Icon size={12} color={c.color} />{c.label}</span>
-                        <span style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(c.value)}</span>
-                      </div>
-                      <ProgressBar pct={catPct} color={c.color} C={C} height={6} />
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SavingsView({ C, goals, setGoals, projects, projectName, setGoalModal, isAdmin, activeProject, setTransactions }) {
-  const shownGoals = activeProject === "all" ? goals : goals.filter((g) => g.projectId === activeProject || g.projectId === "all");
-  const [payGoal, setPayGoal] = useState(null);
-  const confirmAddFunds = (n) => {
-    const goal = payGoal;
-    if (!goal) return;
-    setGoals((prev) => prev.map((g) => (g.id === goal.id ? { ...g, current: g.current + n } : g)));
-    const projId = goal.projectId === "all" ? (projects[0]?.id || "") : goal.projectId;
-    if (projId) {
-      setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: projId, category: "tabungan", amount: n, date: new Date().toISOString().slice(0, 10), note: `Setor ke tabungan: ${goal.name}` }, ...prev]);
-    }
-  };
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Target Tabungan" subtitle="Rencana dana jangka panjang kawasan" action={isAdmin ? { label: "Tambah Target", onClick: () => setGoalModal("new") } : null} />
-      {shownGoals.length === 0 && <div className="text-sm" style={{ color: C.textMuted }}>Belum ada data tabungan.</div>}
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {shownGoals.map((g) => {
-          const pct = g.target ? (g.current / g.target) * 100 : 0;
-          const daysLeft = Math.ceil((new Date(g.deadline) - new Date()) / 86400000);
-          return (
-            <Card key={g.id} C={C} className="relative overflow-hidden">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{g.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>{projectName(g.projectId === "all" ? undefined : g.projectId) || "Seluruh Kawasan"}</div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {isAdmin && <button onClick={() => setGoalModal(g)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
-                  {isAdmin && <button onClick={() => { if (confirm(`Hapus target "${g.name}"?`)) setGoals((prev) => prev.filter((x) => x.id !== g.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>}
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}><PiggyBank size={17} color={C.jade} /></div>
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1.5 mb-1">
-                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: C.text }}>{fmtIDR(g.current)}</span> <span className="text-xs" style={{ color: C.textMuted }}>/ {fmtIDR(g.target)}</span>
-              </div>
-              <ProgressBar pct={pct} color={C.jade} C={C} height={9} />
-              <div className="flex items-center justify-between mt-3 text-xs" style={{ color: C.textMuted }}>
-                <span>{pct.toFixed(0)}% tercapai</span> <span className="flex items-center gap-1"><Calendar size={11} />{daysLeft > 0 ? `${daysLeft} hari lagi` : "Jatuh tempo"}</span>
-              </div>
-              <button onClick={() => setPayGoal(g)} className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.jade, border: `1px solid ${C.border}` }}>
-                <PlusCircle size={14} /> Tambah Dana
-              </button>
-            </Card>
-          );
-        })}
-      </div>
-      <QuickPaymentModal
-        open={!!payGoal}
-        onClose={() => setPayGoal(null)}
-        C={C}
-        title="Tambah Dana Tabungan"
-        itemName={payGoal?.name}
-        remaining={payGoal ? Math.max(0, payGoal.target - payGoal.current) : null}
-        confirmLabel="Tambah Dana"
-        onConfirm={confirmAddFunds}
-      />
-    </div>
-  );
-}
-
-function BillsView({ C, bills, setBills, projects, projectName, setBillModal, isAdmin, getCat, activeProject, setTransactions }) {
-  const today = new Date(new Date().toDateString());
-  const sorted = [...bills].filter((b) => activeProject === "all" || b.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const [payBill, setPayBill] = useState(null);
-  const confirmAddPayment = (amt) => {
-    const bill = payBill;
-    if (!bill) return;
-    setBills((prev) => prev.map((b) => (b.id === bill.id ? { ...b, paidAmount: Math.min(b.amount, b.paidAmount + amt) } : b)));
-    setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: bill.projectId, category: bill.category || "belanja", amount: amt, date: new Date().toISOString().slice(0, 10), note: `Bayar tagihan: ${bill.name}` }, ...prev]);
-  };
-  const markFullyPaid = (id) => {
-    const bill = bills.find((b) => b.id === id);
-    if (!bill) return;
-    const remaining = Math.max(0, bill.amount - bill.paidAmount);
-    setBills((prev) => prev.map((b) => (b.id === id ? { ...b, paidAmount: b.amount } : b)));
-    if (remaining > 0) {
-      setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: bill.projectId, category: bill.category || "belanja", amount: remaining, date: new Date().toISOString().slice(0, 10), note: `Pelunasan tagihan: ${bill.name}` }, ...prev]);
-    }
-  };
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Pengingat Tagihan" subtitle="Lacak progres pembayaran hingga tagihan lunas" action={isAdmin ? { label: "Tambah Tagihan", onClick: () => setBillModal("new") } : null} />
-      {sorted.length === 0 && <div className="text-sm" style={{ color: C.textMuted }}>Belum ada data tagihan.</div>}
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {sorted.map((b) => {
-          const cat = getCat(b.category || "belanja");
-          const CatIcon = isValidIcon(cat.icon) ? cat.icon : Tag;
-          const isPaid = b.paidAmount >= b.amount;
-          const due = new Date(b.dueDate);
-          const overdue = !isPaid && due < today;
-          const soon = !isPaid && !overdue && (due - today) / 86400000 <= 5;
-          const pct = b.amount ? (b.paidAmount / b.amount) * 100 : 0;
-          const daysLeft = Math.ceil((due - today) / 86400000);
-          return (
-            <Card key={b.id} C={C} className="relative overflow-hidden">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{b.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>{projectName(b.projectId)} · {b.recurring}</div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {isAdmin && <button onClick={() => setBillModal(b)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
-                  {isAdmin && <button onClick={() => { if (confirm(`Hapus tagihan "${b.name}"?`)) setBills((prev) => prev.filter((x) => x.id !== b.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>}
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : `${cat.color}22` }}>
-                    {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <CatIcon size={17} color={cat.color} />}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1.5 mb-1">
-                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: C.text }}>{fmtIDR(b.paidAmount)}</span><span className="text-xs" style={{ color: C.textMuted }}>/ {fmtIDR(b.amount)}</span>
-              </div>
-              <ProgressBar pct={pct} color={isPaid ? C.jade : overdue ? C.coral : C.gold} C={C} height={9} />
-              <div className="flex items-center justify-between mt-3 text-xs" style={{ color: C.textMuted }}>
-                <span>{pct.toFixed(0)}% terbayar</span><span className="flex items-center gap-1"><Calendar size={11} />{isPaid ? "Lunas" : daysLeft >= 0 ? `${daysLeft} hari lagi` : `Terlambat ${Math.abs(daysLeft)} hari`}</span>
-              </div>
-              <div className="mt-2"><Badge C={C} tone={isPaid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>{isPaid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera Jatuh Tempo" : "Belum Lunas"}</Badge></div>
-              {!isPaid && (
-                <div className="flex gap-2 mt-4">
-                  <button onClick={() => setPayBill(b)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}><PlusCircle size={14} /> Bayar</button>
-                  <button onClick={() => markFullyPaid(b.id)} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}><CheckCircle2 size={14} /></button>
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
-      <QuickPaymentModal
-        open={!!payBill}
-        onClose={() => setPayBill(null)}
-        C={C}
-        title="Bayar Tagihan"
-        itemName={payBill?.name}
-        remaining={payBill ? Math.max(0, payBill.amount - payBill.paidAmount) : null}
-        confirmLabel="Bayar"
-        onConfirm={confirmAddPayment}
-      />
-    </div>
-  );
-}
-
-function DebtsView({ C, debts, setDebts, projects, projectName, setDebtModal, isAdmin, activeProject, setTransactions }) {
-  const today = new Date(new Date().toDateString());
-  const sorted = [...debts].filter((d) => activeProject === "all" || d.projectId === activeProject).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const [payDebt, setPayDebt] = useState(null);
-  const confirmAddPayment = (amt) => {
-    const debt = payDebt;
-    if (!debt) return;
-    setDebts((prev) => prev.map((d) => (d.id === debt.id ? { ...d, paidAmount: Math.min(d.amount, d.paidAmount + amt) } : d)));
-    setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: debt.projectId, category: "bayar-hutang", amount: amt, date: new Date().toISOString().slice(0, 10), note: `Cicilan hutang: ${debt.name}` }, ...prev]);
-  };
-  const markFullyPaid = (id) => {
-    const debt = debts.find((d) => d.id === id);
-    if (!debt) return;
-    const remaining = Math.max(0, debt.amount - debt.paidAmount);
-    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, paidAmount: d.amount } : d)));
-    if (remaining > 0) {
-      setTransactions((prev) => [{ id: uid("t"), type: "expense", projectId: debt.projectId, category: "bayar-hutang", amount: remaining, date: new Date().toISOString().slice(0, 10), note: `Pelunasan hutang: ${debt.name}` }, ...prev]);
-    }
-  };
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Hutang" subtitle="Lacak progres pelunasan hutang & pinjaman kawasan" action={isAdmin ? { label: "Tambah Hutang", onClick: () => setDebtModal("new") } : null} />
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {sorted.length === 0 && <div className="text-sm py-6" style={{ color: C.textMuted }}>Belum ada data hutang.</div>}
-        {sorted.map((d) => {
-          const isPaid = d.paidAmount >= d.amount;
-          const due = new Date(d.dueDate);
-          const overdue = !isPaid && due < today;
-          const soon = !isPaid && !overdue && (due - today) / 86400000 <= 5;
-          const pct = d.amount ? (d.paidAmount / d.amount) * 100 : 0;
-          const daysLeft = Math.ceil((due - today) / 86400000);
-          return (
-            <Card key={d.id} C={C} className="relative overflow-hidden">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{d.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>{projectName(d.projectId)} · {d.recurring}</div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {isAdmin && <button onClick={() => setDebtModal(d)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
-                  {isAdmin && <button onClick={() => { if (confirm(`Hapus hutang "${d.name}"?`)) setDebts((prev) => prev.filter((x) => x.id !== d.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>}
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: isPaid ? C.jadeSoft : overdue ? C.coralSoft : soon ? C.goldSoft : C.goldSoft }}>
-                    {isPaid ? <CheckCircle2 size={17} color={C.jade} /> : overdue ? <AlertTriangle size={17} color={C.coral} /> : <HandCoins size={17} color={C.gold} />}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-baseline gap-1.5 mb-1">
-                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: C.text }}>{fmtIDR(d.paidAmount)}</span><span className="text-xs" style={{ color: C.textMuted }}>/ {fmtIDR(d.amount)}</span>
-              </div>
-              <ProgressBar pct={pct} color={isPaid ? C.jade : overdue ? C.coral : C.gold} C={C} height={9} />
-              <div className="flex items-center justify-between mt-3 text-xs" style={{ color: C.textMuted }}>
-                <span>{pct.toFixed(0)}% terlunasi</span><span className="flex items-center gap-1"><Calendar size={11} />{isPaid ? "Lunas" : daysLeft >= 0 ? `${daysLeft} hari lagi` : `Terlambat ${Math.abs(daysLeft)} hari`}</span>
-              </div>
-              <div className="mt-2"><Badge C={C} tone={isPaid ? "jade" : overdue ? "coral" : soon ? "gold" : "neutral"}>{isPaid ? "Lunas" : overdue ? "Terlambat" : soon ? "Segera Jatuh Tempo" : "Belum Lunas"}</Badge></div>
-              {!isPaid && (
-                <div className="flex gap-2 mt-4">
-                  <button onClick={() => setPayDebt(d)} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.surface2, color: C.gold, border: `1px solid ${C.border}` }}><PlusCircle size={14} /> Cicil</button>
-                  <button onClick={() => markFullyPaid(d.id)} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.02] active:scale-95" style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}><CheckCircle2 size={14} /></button>
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
-      <QuickPaymentModal
-        open={!!payDebt}
-        onClose={() => setPayDebt(null)}
-        C={C}
-        title="Cicil Hutang"
-        itemName={payDebt?.name}
-        remaining={payDebt ? Math.max(0, payDebt.amount - payDebt.paidAmount) : null}
-        confirmLabel="Bayar Cicilan"
-        onConfirm={confirmAddPayment}
-      />
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------
-   MODAL & KEUNTUNGAN — dua kantong terpisah per projek, murni
-   diisi/dikurangi manual oleh pengguna, TIDAK otomatis dari transaksi.
-----------------------------------------------------------------*/
-function FundAdjustModal({ open, onClose, C, pocket, projectName, onConfirm }) {
-  const [mode, setMode] = useState("in"); // "in" = setor, "out" = ambil
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-
-  useEffect(() => { if (open) { setMode("in"); setAmount(""); setNote(""); } }, [open]);
-
-  const submit = () => {
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return;
-    onConfirm(mode === "in" ? amt : -amt, note);
-    onClose();
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={`${pocket === "modal" ? "Modal" : "Keuntungan"} — ${projectName || ""}`} C={C}>
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <button type="button" onClick={() => setMode("in")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-          style={{ background: mode === "in" ? C.jadeSoft : C.surface2, color: mode === "in" ? C.jade : C.textMuted, border: `1px solid ${mode === "in" ? C.jade : C.border}` }}>
-          + Setor
-        </button>
-        <button type="button" onClick={() => setMode("out")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-          style={{ background: mode === "out" ? C.coralSoft : C.surface2, color: mode === "out" ? C.coral : C.textMuted, border: `1px solid ${mode === "out" ? C.coral : C.border}` }}>
-          − Ambil
-        </button>
-      </div>
-      <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
-      <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Suntikan modal awal" style={inputStyle(C)} /></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>Simpan</button>
-    </Modal>
-  );
-}
-
-function ItemsView({ C, items, setItems, projects, projectName, isAdmin, activeProject, setItemModal }) {
-  const shown = activeProject === "all" ? items : items.filter((it) => it.projectId === activeProject);
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Barang" subtitle="Katalog harga modal & harga jual per barang, untuk hitung otomatis modal/untung saat terjual" action={isAdmin ? { label: "Tambah Barang", onClick: () => setItemModal("new") } : null} />
-      {shown.length === 0 && <div className="text-sm" style={{ color: C.textFaint }}>Belum ada barang. {isAdmin ? "Tambahkan dulu supaya bisa dipilih saat mencatat pemasukan penjualan." : ""}</div>}
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {shown.map((it) => {
-          const margin = it.sellPrice - it.costPrice;
-          const marginPct = it.sellPrice ? (margin / it.sellPrice) * 100 : 0;
-          return (
-            <Card key={it.id} C={C}>
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{it.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: C.textFaint }}>{projectName(it.projectId)}</div>
-                </div>
-                {isAdmin && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => setItemModal(it)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>
-                    <button onClick={() => { if (confirm(`Hapus barang "${it.name}"?`)) setItems((prev) => prev.filter((x) => x.id !== it.id)); }} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.coralSoft, color: C.coral }} title="Hapus"><Trash2 size={13} /></button>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs mb-3">
-                <div>
-                  <div style={{ color: C.textFaint }}>Harga Modal</div>
-                  <div className="font-semibold" style={{ color: C.blue, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(it.costPrice)}</div>
-                </div>
-                <div>
-                  <div style={{ color: C.textFaint }}>Harga Jual</div>
-                  <div className="font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(it.sellPrice)}</div>
-                </div>
-              </div>
-              <div className="pt-3 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${C.borderSoft}`, color: C.textFaint }}>
-                <span>Untung / item</span>
-                <span className="font-semibold" style={{ color: margin >= 0 ? C.jade : C.coral, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(margin)} ({marginPct.toFixed(0)}%)</span>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function AddItemModal({ open, onClose, C, projects, activeProject, editing, onSave }) {
-  const [name, setName] = useState("");
-  const [projectId, setProjectId] = useState(activeProject !== "all" ? activeProject : (projects[0]?.id || ""));
-  const [costPrice, setCostPrice] = useState("");
-  const [sellPrice, setSellPrice] = useState("");
-  const isEditing = !!editing;
-  useEffect(() => {
-    if (open && editing) {
-      setName(editing.name); setProjectId(editing.projectId);
-      setCostPrice(String(editing.costPrice)); setSellPrice(String(editing.sellPrice));
-    } else if (open && !editing) {
-      setName(""); setProjectId(activeProject !== "all" ? activeProject : (projects[0]?.id || ""));
-      setCostPrice(""); setSellPrice("");
-    }
-  }, [open, editing]);
-  const submit = () => {
-    const cp = Number(String(costPrice).replace(/[^0-9]/g, ""));
-    const sp = Number(String(sellPrice).replace(/[^0-9]/g, ""));
-    if (!name || !projectId || sp <= 0) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, costPrice: cp, sellPrice: sp });
-    onClose();
-  };
-  return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Barang" : "Barang Baru"} C={C}>
-      <Field label="Nama Barang" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Es Teh Manis" style={inputStyle(C)} /></Field>
-      <Field label="Projek" C={C}>
-        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </Field>
-      <Field label="Harga Modal (Rp)" C={C}><AmountInput value={costPrice} onChange={setCostPrice} C={C} /></Field>
-      <Field label="Harga Jual (Rp)" C={C}><AmountInput value={sellPrice} onChange={setSellPrice} C={C} /></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Barang"}</button>
-    </Modal>
-  );
-}
-
-function FundsView({ C, projects, funds, setFunds, getFundBalance, activeProject, projectName, isAdmin }) {
-  const [adjustTarget, setAdjustTarget] = useState(null); // { projectId, pocket }
-  const shownProjects = activeProject === "all" ? projects : projects.filter((p) => p.id === activeProject);
-
-  const confirmAdjust = (signedAmount, note) => {
-    if (!adjustTarget) return;
-    setFunds((prev) => [{ id: uid("f"), projectId: adjustTarget.projectId, pocket: adjustTarget.pocket, amount: signedAmount, note, date: new Date().toISOString().slice(0, 10) }, ...prev]);
-  };
-
-  const history = useMemo(() => {
-    const scoped = activeProject === "all" ? funds : funds.filter((f) => f.projectId === activeProject);
-    return [...scoped].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
-  }, [funds, activeProject]);
-
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Modal & Keuntungan" subtitle="Otomatis dari penjualan barang & pengeluaran, plus bisa disetor/diambil manual" />
-      {shownProjects.length === 0 && <div className="text-sm" style={{ color: C.textFaint }}>Belum ada data projek.</div>}
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {shownProjects.map((p) => {
-          const modalBal = getFundBalance(p.id, "modal");
-          const profitBal = getFundBalance(p.id, "keuntungan");
-          return (
-            <Card key={p.id} C={C}>
-              <div className="font-semibold mb-3" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{p.name}</div>
-              {[{ pocket: "modal", label: "Modal", balance: modalBal, color: C.blue, bg: `${C.blue}22` }, { pocket: "keuntungan", label: "Keuntungan", balance: profitBal, color: C.jade, bg: C.jadeSoft }].map((row) => (
-                <div key={row.pocket} className="flex items-center justify-between p-3 rounded-xl mb-2" style={{ background: row.bg }}>
-                  <div>
-                    <div className="text-xs mb-0.5" style={{ color: row.color }}>{row.label}</div>
-                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{fmtIDR(row.balance)}</div>
-                  </div>
-                  {isAdmin && (
-                    <button onClick={() => setAdjustTarget({ projectId: p.id, pocket: row.pocket })} className="p-2 rounded-lg transition-transform duration-150 hover:scale-105" style={{ background: C.surface2, color: row.color }} title="Setor / Ambil">
-                      <PlusCircle size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </Card>
-          );
-        })}
-      </div>
-      <Card C={C} pad="p-0">
-        <div className="px-5 pt-5 pb-3">
-          <h3 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Riwayat Setor/Ambil</h3>
-        </div>
-        {history.length === 0 && <div className="px-5 pb-5 text-sm" style={{ color: C.textFaint }}>Belum ada riwayat.</div>}
-        {history.map((f, i) => (
-          <div key={f.id} className="flex items-center gap-3 px-5 py-3" style={{ borderTop: i === 0 ? "none" : `1px solid ${C.borderSoft}` }}>
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: f.pocket === "modal" ? `${C.blue}22` : C.jadeSoft }}>
-              <Landmark size={15} color={f.pocket === "modal" ? C.blue : C.jade} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate" style={{ color: C.text }}>{f.note || (f.pocket === "modal" ? "Modal" : "Keuntungan")}</div>
-              <div className="text-xs" style={{ color: C.textMuted }}>{projectName(f.projectId)} · {f.pocket === "modal" ? "Modal" : "Keuntungan"} · {fmtDate(f.date)}</div>
-            </div>
-            <div className="text-sm font-semibold shrink-0" style={{ fontFamily: "JetBrains Mono, monospace", color: f.amount >= 0 ? C.jade : C.coral }}>
-              {f.amount >= 0 ? "+" : ""}{fmtIDR(f.amount)}
-            </div>
+      {tab === "daily" && (
+        <Card className="p-4 sm:p-6 max-w-lg">
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-44">{db.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
           </div>
-        ))}
-      </Card>
-      <FundAdjustModal
-        open={!!adjustTarget}
-        onClose={() => setAdjustTarget(null)}
-        C={C}
-        pocket={adjustTarget?.pocket}
-        projectName={adjustTarget ? projects.find((p) => p.id === adjustTarget.projectId)?.name : ""}
-        onConfirm={confirmAdjust}
-      />
-    </div>
-  );
-}
+          <div className="text-center mb-4">
+            <p className="font-display font-extrabold text-lg">LAPORAN HARIAN</p>
+            <p className={cx("text-sm", dark ? "text-slate-400" : "text-slate-500")}>{store?.name}</p>
+            <p className={cx("text-xs", dark ? "text-slate-500" : "text-slate-400")}>{fmtDate(date)}</p>
+          </div>
+          <div className={cx("rounded-xl divide-y", dark ? "divide-slate-700 border border-slate-700" : "divide-slate-100 border border-slate-200")}>
+            <ReportRow label="Penjualan" value={fmtIDR(dayIncome)} tone="green" />
+            <ReportRow label="Pengeluaran" value={fmtIDR(dayExp)} tone="red" />
+            <ReportRow label="Keuntungan" value={fmtIDR(dayProfit)} tone="indigo" bold />
+            <ReportRow label="Sudah diserahkan" value={fmtIDR(dayHanded)} />
+            <ReportRow label="Belum diserahkan" value={fmtIDR(Math.max(dayProfit - dayHanded, 0))} tone="amber" />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Btn variant="ghost" size="sm" onClick={doPrint}><Printer size={13} /> Cetak</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => exportCSV("sales", daySales, () => store?.name)}><Download size={13} /> Excel</Btn>
+            <Btn variant="green" size="sm" onClick={() => setWaOpen(true)}><Send size={13} /> Kirim WhatsApp</Btn>
+          </div>
+        </Card>
+      )}
 
-const PEOPLE_CATEGORIES = [{ id: "staff-l", label: "Staff Laki-laki" }, { id: "staff-p", label: "Staff Perempuan" }, { id: "anak", label: "Anak" }];
-const peopleCatLabel = (id) => PEOPLE_CATEGORIES.find((c) => c.id === id)?.label || id;
-
-function PeopleView({ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }) {
-  const [filter, setFilter] = useState("all");
-  const rows = people.filter((p) => (filter === "all" || p.category === filter) && (activeProject === "all" || p.projectId === activeProject));
-  return (
-    <div className="space-y-5 lb-anim">
-      <ViewHeader C={C} title="Data Ahli" subtitle="Data staff (laki-laki/perempuan) dan anak-anak di kawasan" action={isAdmin ? { label: "Tambah Data", onClick: () => setPersonModal("new") } : null} />
-      <div className="flex gap-2 flex-wrap">
-        {[{ id: "all", label: "Semua" }, ...PEOPLE_CATEGORIES].map((f) => (
-          <button key={f.id} onClick={() => setFilter(f.id)} className="px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150" style={{ background: filter === f.id ? C.jadeSoft : C.surface2, color: filter === f.id ? C.jade : C.textMuted, border: `1px solid ${C.border}` }}>{f.label}</button>
-        ))}
-      </div>
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {rows.length === 0 && <div className="text-sm py-6" style={{ color: C.textMuted }}>Belum ada data.</div>}
-        {rows.map((p) => (
-          <Card key={p.id} C={C}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="font-semibold" style={{ fontFamily: "Fraunces, serif", fontSize: 16, color: C.text }}>{p.name}</div>
-                <div className="text-xs mt-0.5" style={{ color: C.textMuted }}>{projectName(p.projectId)}</div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {isAdmin && <button onClick={() => setPersonModal(p)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface2, color: C.textMuted }} title="Edit"><Pencil size={13} /></button>}
-                <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jadeSoft }}>{p.category === "anak" ? <Baby size={17} color={C.jade} /> : <User size={17} color={C.jade} />}</div>
-              </div>
-            </div>
-            <Badge C={C} tone="jade">{peopleCatLabel(p.category)}</Badge>
-            <div className="mt-3 space-y-1.5 text-xs" style={{ color: C.textMuted }}>
-              <div className="flex justify-between"><span style={{ color: C.textMuted }}>Nama Ayah</span><span style={{ color: C.text }}>{p.fatherName || "-"}</span></div>
-              <div className="flex justify-between"><span style={{ color: C.textMuted }}>Nama Ibu</span><span style={{ color: C.text }}>{p.motherName || "-"}</span></div>
-              <div className="flex justify-between"><span style={{ color: C.textMuted }}>Tempat, Tgl Lahir</span><span style={{ color: C.text }}>{p.birthPlace}{p.birthDate ? `, ${fmtDate(p.birthDate)}` : ""}</span></div>
-              {p.category !== "anak" && (
-                <>
-                  <div className="flex justify-between"><span style={{ color: C.textMuted }}>Nama Istri/Suami</span><span style={{ color: C.text }}>{p.spouseName || "-"}</span></div>
-                  <div className="flex justify-between"><span style={{ color: C.textMuted }}>Jumlah Anak</span><span style={{ color: C.text }}>{p.childrenCount ?? 0}</span></div>
-                </>
-              )}
-            </div>
-            {(() => {
-              const bday = daysUntilBirthday(p.birthDate);
-              if (!bday) return null;
-              const soon = bday.days <= 30;
-              return (
-                <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
-                  <span className="flex items-center gap-1.5 text-xs" style={{ color: soon ? C.gold : C.textMuted }}>
-                    <Cake size={13} /> Ultah ke-{bday.nextAge}
-                  </span>
-                  <Badge C={C} tone={soon ? "gold" : "neutral"}>{bday.days === 0 ? "Hari ini! 🎉" : `${bday.days} hari lagi`}</Badge>
-                </div>
-              );
-            })()}
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AnalyticsView({ C, categoryBreakdown, monthlyTrend, projectComparison, totals, activeProject, projectName }) {
-  return (
-    <div className="space-y-6 lb-anim">
-      <ViewHeader C={C} title="Analitik Keuangan" subtitle={activeProject === "all" ? "Wawasan menyeluruh atas kinerja keuangan kawasan" : `Wawasan keuangan untuk ${projectName(activeProject)}`} />
-      <div className="grid lg:grid-cols-2 gap-6">
-        {activeProject === "all" ? (
-          <Card C={C}>
-            <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Anggaran vs Realisasi per Projek</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={projectComparison}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                <XAxis dataKey="name" stroke={C.textMuted} fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
-                <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
-                <Bar dataKey="Anggaran" fill={C.blue} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Terpakai" fill={C.gold} radius={[6, 6, 0, 0]} />
+      {tab === "monthly" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-44">{db.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
+            <Select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-36">
+              {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </Select>
+            <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-24" />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard icon={TrendingUp} tone="green" label="Total Penjualan" value={fmtIDR(mIncome)} />
+            <StatCard icon={TrendingDown} tone="red" label="Total Pengeluaran" value={fmtIDR(mExp)} />
+            <StatCard icon={PiggyBank} tone="indigo" label="Keuntungan" value={fmtIDR(mProfit)} sub={`vs bulan lalu ${growth !== "—" ? growth + "%" : "—"}`} />
+            <StatCard icon={HandCoins} tone="amber" label="Total Serahan" value={fmtIDR(mHandovers.reduce((a, h) => a + h.amount, 0))} />
+          </div>
+          <Card className="p-4 sm:p-5">
+            <p className="font-display font-bold text-sm mb-3">Perbandingan Bulan Ini vs Bulan Lalu</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={[
+                { name: "Penjualan", ini: mIncome, lalu: pIncome },
+                { name: "Pengeluaran", ini: mExp, lalu: pExp },
+                { name: "Keuntungan", ini: mProfit, lalu: pProfit },
+              ]}>
+                <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#1e293b" : "#f1f5f9"} vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: dark ? "#64748b" : "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: dark ? "#64748b" : "#94a3b8" }} tickFormatter={fmtIDRshort} axisLine={false} tickLine={false} width={48} />
+                <Tooltip formatter={(v) => fmtIDR(v)} contentStyle={{ fontSize: 12, borderRadius: 12, border: "none" }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="lalu" name="Bulan lalu" fill="#94a3b8" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="ini" name="Bulan ini" fill="#4F46E5" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Card>
-        ) : (
-          <Card C={C}>
-            <h3 className="mb-1" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Ringkasan Projek Ini</h3>
-            <p className="text-xs mb-4" style={{ color: C.textMuted }}>Pilih "Semua Projek" di sidebar untuk membandingkan antar projek.</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs mb-1" style={{ color: C.textMuted }}>Pemasukan</div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.jade }}>{fmtIDR(totals.income)}</div>
-              </div>
-              <div>
-                <div className="text-xs mb-1" style={{ color: C.textMuted }}>Pengeluaran</div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: C.coral }}>{fmtIDR(totals.expense)}</div>
-              </div>
-              <div className="col-span-2">
-                <div className="text-xs mb-1" style={{ color: C.textMuted }}>Saldo Bersih</div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: totals.balance >= 0 ? C.jade : C.coral }}>{fmtIDR(totals.balance)}</div>
-              </div>
-            </div>
-          </Card>
-        )}
-        <Card C={C}>
-          <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Komposisi Pengeluaran</h3>
-          {categoryBreakdown.length === 0 ? <div className="text-sm py-10 text-center" style={{ color: C.textMuted }}>Belum ada data</div> :
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={categoryBreakdown} dataKey="value" nameKey="label" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                  {categoryBreakdown.map((c, i) => <Cell key={i} fill={c.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
-                <Legend wrapperStyle={{ fontSize: 11, color: C.textMuted }} />
-              </PieChart>
-            </ResponsiveContainer>
-          }
-        </Card>
-      </div>
-      <Card C={C}>
-        <h3 className="mb-4" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>Arus Kas Bulanan</h3>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={monthlyTrend}>
-            <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-            <XAxis dataKey="label" stroke={C.textMuted} fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke={C.textMuted} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-            <Tooltip contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.text }} formatter={(v) => fmtIDR(v)} labelStyle={{ color: C.text }} itemStyle={{ color: C.text }} />
-            <Legend wrapperStyle={{ fontSize: 12, color: C.textMuted }} />
-            <Bar dataKey="Pemasukan" fill={C.jade} radius={[6, 6, 0, 0]} />
-            <Bar dataKey="Pengeluaran" fill={C.coral} radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-    </div>
-  );
-}
-
-function ViewHeader({ C, title, subtitle, action }) {
-  return (
-    <div className="flex items-start justify-between gap-4 flex-wrap">
-      <div>
-        <h2 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 24, color: C.text }}>{title}</h2>
-        <p className="text-sm mt-1" style={{ color: C.textMuted }}>{subtitle}</p>
-      </div>
-      {action && (
-        <button onClick={action.onClick} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:scale-[1.03] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>
-          <Plus size={15} /> {action.label}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ManageCategoriesModal({ open, onClose, C, categories, setCategories }) {
-  const [newName, setNewName] = useState("");
-  const [color, setColor] = useState(PROJECT_COLORS[0]);
-  const handleAdd = () => {
-    if (!newName.trim()) return;
-    setCategories(prev => [...prev, {
-      id: "cat_" + Date.now(),
-      label: newName.trim(),
-      icon: Tag,
-      color: color,
-      default: false
-    }]);
-    setNewName("");
-  };
-  const handleDelete = (id) => {
-    setCategories(prev => {
-      const next = prev.filter(c => c.id !== id);
-      return next.length > 0 ? next : prev;
-    });
-  };
-  return (
-    <Modal open={open} onClose={onClose} title="Kelola Kategori" C={C}>
-      <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-1">
-        {categories.map(c => {
-          const CatIcon = isValidIcon(c.icon) ? c.icon : Tag;
-          return (
-            <div key={c.id} className="flex items-center justify-between p-2.5 rounded-lg" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
-              <div className="flex items-center gap-2.5 text-sm" style={{ color: C.text }}>
-                <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: `${c.color}22` }}>
-                  <CatIcon size={12} color={c.color} />
-                </div>
-                {c.label}
-              </div>
-              {!c.default && (
-                <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded hover:bg-black/10" style={{ color: C.coral }} title="Hapus">
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      <div style={{ borderTop: `1px solid ${C.border}` }} className="pt-4">
-        <Field label="Nama Kategori Baru" C={C}>
-          <input value={newName} onChange={e => setNewName(e.target.value)} style={inputStyle(C)} placeholder="Contoh: Transportasi" />
-        </Field>
-        <Field label="Pilih Warna" C={C}>
-          <div className="flex flex-wrap gap-2">
-            {PROJECT_COLORS.map(col => (
-              <button key={col} onClick={() => setColor(col)} className="w-8 h-8 rounded-full border-2 transition-all" style={{ background: col, borderColor: color === col ? C.text : 'transparent' }} />
-            ))}
-          </div>
-        </Field>
-        <button onClick={handleAdd} className="w-full mt-2 py-2.5 rounded-lg font-medium transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jadeSoft, color: C.jade, border: `1px solid ${C.border}` }}>
-          Tambah Kategori Baru
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-function AddTransactionModal({ open, onClose, C, projects, goals, debts, categories, productItems, editing, onAddTransaction, onEditTransaction, onContributeGoal, onPayDebt }) {
-  const [type, setType] = useState("expense");
-  const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [category, setCategory] = useState(categories[0]?.id || "");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [note, setNote] = useState("");
-  const [goalId, setGoalId] = useState(goals[0]?.id || "");
-  const [debtId, setDebtId] = useState(debts?.[0]?.id || "");
-  const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [fundSource, setFundSource] = useState("keuntungan"); // sumber dana pengeluaran: "modal" atau "keuntungan"
-  // Baris kategori+jumlah untuk pengeluaran multi-kategori (hanya dipakai saat tambah baru, bukan edit)
-  const [items, setItems] = useState([{ id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
-  const addItem = () => setItems((prev) => [...prev, { id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
-  const removeItem = (id) => setItems((prev) => (prev.length > 1 ? prev.filter((it) => it.id !== id) : prev));
-  const updateItem = (id, field, value) => setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
-  const itemsTotal = items.reduce((s, it) => s + (Number(String(it.amount).replace(/[^0-9]/g, "")) || 0), 0);
-  const isEditing = !!editing;
-
-  // Pemasukan lewat penjualan barang: baris {itemId, qty}
-  const [incomeMode, setIncomeMode] = useState("manual"); // "manual" | "items"
-  const [saleRows, setSaleRows] = useState([{ id: uid("s"), itemId: "", qty: "1" }]);
-  const addSaleRow = () => setSaleRows((prev) => [...prev, { id: uid("s"), itemId: "", qty: "1" }]);
-  const removeSaleRow = (id) => setSaleRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
-  const updateSaleRow = (id, field, value) => setSaleRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-  const projectItems = (productItems || []).filter((it) => it.projectId === projectId);
-
-  useEffect(() => {
-    if (open && editing) {
-      setType(editing.type); setProjectId(editing.projectId); setCategory(editing.category);
-      setAmount(String(editing.amount)); setDate(editing.date); setNote(editing.note);
-      setPaymentMethod(editing.paymentMethod === "online" ? "online" : "cash");
-      setFundSource(editing.fundSource === "modal" ? "modal" : "keuntungan");
-    } else if (open && !editing) {
-      setType("expense"); setProjectId(projects[0]?.id || ""); setCategory(categories[0]?.id || "");
-      setAmount(""); setDate(new Date().toISOString().slice(0, 10)); setNote("");
-      setPaymentMethod("cash");
-      setFundSource("keuntungan");
-      setItems([{ id: uid("i"), category: categories[0]?.id || "", amount: "", note: "" }]);
-      const pid = projects[0]?.id || "";
-      const hasItems = (productItems || []).some((it) => it.projectId === pid);
-      setIncomeMode(hasItems ? "items" : "manual");
-      setSaleRows([{ id: uid("s"), itemId: (productItems || []).find((it) => it.projectId === pid)?.id || "", qty: "1" }]);
-    }
-  }, [open, editing, projects, categories]);
-
-  const selectedDebt = (debts || []).find((d) => d.id === debtId);
-  const remainingDebt = selectedDebt ? Math.max(0, selectedDebt.amount - selectedDebt.paidAmount) : 0;
-
-  const amtNum = Number(String(amount).replace(/[^0-9]/g, ''));
-
-  // Total hitungan penjualan barang
-  const saleCalc = saleRows.reduce((acc, r) => {
-    const item = (productItems || []).find((it) => it.id === r.itemId);
-    const qty = Number(r.qty) || 0;
-    if (!item || qty <= 0) return acc;
-    return { revenue: acc.revenue + qty * item.sellPrice, modal: acc.modal + qty * item.costPrice, count: acc.count + 1 };
-  }, { revenue: 0, modal: 0, count: 0 });
-  const saleProfit = saleCalc.revenue - saleCalc.modal;
-
-  const submit = () => {
-    if (isEditing) {
-      if (!amtNum || amtNum <= 0) return;
-      if (!note || !projectId) return;
-      const data = { type, projectId, category: type === "income" ? categories[0]?.id : category, amount: amtNum, date, note };
-      if (type === "income") {
-        data.paymentMethod = paymentMethod;
-        const origModal = editing.splitModal || 0;
-        const origAmt = editing.amount || 1;
-        const ratio = origModal / origAmt;
-        data.splitModal = Math.round(amtNum * ratio);
-        data.splitProfit = amtNum - data.splitModal;
-      }
-      if (type === "expense") data.fundSource = fundSource;
-      onEditTransaction(editing.id, data);
-      onClose(); return;
-    }
-    if (type === "expense") {
-      if (!projectId) return;
-      const validItems = items
-        .map((it) => ({ ...it, amt: Number(String(it.amount).replace(/[^0-9]/g, "")) }))
-        .filter((it) => it.amt > 0 && it.category);
-      if (validItems.length === 0) return;
-      validItems.forEach((it) => {
-        const catLabel = categories.find((c) => c.id === it.category)?.label || "";
-        onAddTransaction({ type: "expense", projectId, category: it.category, amount: it.amt, date, note: it.note || note || catLabel, fundSource });
-      });
-      onClose(); return;
-    }
-    if (type === "income") {
-      if (!projectId) return;
-      if (incomeMode === "items") {
-        if (saleCalc.count === 0) return;
-        const autoNote = saleRows
-          .filter((r) => r.itemId && Number(r.qty) > 0)
-          .map((r) => { const it = (productItems || []).find((x) => x.id === r.itemId); return it ? `${r.qty}x ${it.name}` : null; })
-          .filter(Boolean).join(", ");
-        onAddTransaction({ type: "income", projectId, category: categories[0]?.id, amount: saleCalc.revenue, date, note: note || autoNote, paymentMethod, splitModal: saleCalc.modal, splitProfit: saleProfit });
-      } else {
-        if (!amtNum || amtNum <= 0 || !note) return;
-        onAddTransaction({ type: "income", projectId, category: categories[0]?.id, amount: amtNum, date, note, paymentMethod, splitModal: 0, splitProfit: amtNum });
-      }
-      onClose(); return;
-    }
-    if (!amtNum || amtNum <= 0) return;
-    if (type === "goal") {
-      const g = goals.find((x) => x.id === goalId); if (!g) return;
-      onAddTransaction({ type: "expense", projectId: g.projectId === "all" ? (projects[0]?.id || "") : g.projectId, category: "tabungan", amount: amtNum, date, note: note || `Setor ke tabungan: ${g.name}`, fundSource });
-      onContributeGoal(goalId, amtNum);
-    } else if (type === "debt") {
-      const d = (debts || []).find((x) => x.id === debtId); if (!d) return;
-      onAddTransaction({ type: "expense", projectId: d.projectId, category: categories[0]?.id, amount: amtNum, date, note: note || `Cicilan hutang: ${d.name}`, fundSource });
-      onPayDebt(debtId, amtNum);
-    }
-    onClose();
-  };
-
-  const ALL_TYPES = [{ id: "expense", label: "Pengeluaran" }, { id: "income", label: "Pemasukan" }, { id: "goal", label: "Ke Tabungan" }, { id: "debt", label: "Bayar Hutang" }];
-  const TYPES = isEditing ? ALL_TYPES.filter((t) => t.id === "expense" || t.id === "income") : ALL_TYPES;
-  const typeColor = (tp) => (tp === "income" ? C.jade : tp === "goal" ? C.blue : tp === "debt" ? C.gold : C.coral);
-
-  return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Transaksi" : "Tambah Transaksi"} C={C}>
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {TYPES.map((tp) => (
-          <button key={tp.id} onClick={() => setType(tp.id)} className="py-2 rounded-lg text-sm font-medium transition-all duration-150" style={{ background: type === tp.id ? `${typeColor(tp.id)}22` : C.surface2, color: type === tp.id ? typeColor(tp.id) : C.textMuted }}>{tp.label}</button>
-        ))}
-      </div>
-      {(type === "expense" || type === "income") && (
-        <>
-          <Field label="Projek" C={C}>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>
-              {projects.length === 0 && <option value="">(Buat projek dulu)</option>}
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </Field>
-          {type === "expense" && isEditing && (
-            <Field label="Kategori" C={C}>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-            </Field>
-          )}
-          {type === "income" && (
-            <>
-              <Field label="Metode Pembayaran" C={C}>
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setPaymentMethod("cash")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-                    style={{ background: paymentMethod === "cash" ? C.jadeSoft : C.surface2, color: paymentMethod === "cash" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "cash" ? C.jade : C.border}` }}>
-                    Cash
-                  </button>
-                  <button type="button" onClick={() => setPaymentMethod("online")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-                    style={{ background: paymentMethod === "online" ? C.jadeSoft : C.surface2, color: paymentMethod === "online" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "online" ? C.jade : C.border}` }}>
-                    Online
-                  </button>
-                </div>
-              </Field>
-              {!isEditing && projectItems.length > 0 && (
-                <Field label="Sumber Pemasukan" C={C}>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => setIncomeMode("items")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-                      style={{ background: incomeMode === "items" ? C.jadeSoft : C.surface2, color: incomeMode === "items" ? C.jade : C.textMuted, border: `1px solid ${incomeMode === "items" ? C.jade : C.border}` }}>
-                      Jual Barang
-                    </button>
-                    <button type="button" onClick={() => setIncomeMode("manual")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-                      style={{ background: incomeMode === "manual" ? C.jadeSoft : C.surface2, color: incomeMode === "manual" ? C.jade : C.textMuted, border: `1px solid ${incomeMode === "manual" ? C.jade : C.border}` }}>
-                      Manual
-                    </button>
-                  </div>
-                </Field>
-              )}
-              {!isEditing && incomeMode === "items" && projectItems.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="block text-xs font-medium" style={{ color: C.textMuted }}>Barang Terjual</span>
-                  </div>
-                  <div className="space-y-2">
-                    {saleRows.map((r) => {
-                      const it = projectItems.find((x) => x.id === r.itemId);
-                      return (
-                        <div key={r.id} className="p-2.5 rounded-xl" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
-                          <div className="flex gap-2 items-center">
-                            <select value={r.itemId} onChange={(e) => updateSaleRow(r.id, "itemId", e.target.value)} style={{ ...inputStyle(C), flex: "1 1 auto" }}>
-                              <option value="">Pilih barang</option>
-                              {projectItems.map((pi) => <option key={pi.id} value={pi.id}>{pi.name} ({fmtIDR(pi.sellPrice)})</option>)}
-                            </select>
-                            <input type="number" min="1" value={r.qty} onChange={(e) => updateSaleRow(r.id, "qty", e.target.value)} style={{ ...inputStyle(C), width: 64, textAlign: "center" }} />
-                            {saleRows.length > 1 && (
-                              <button type="button" onClick={() => removeSaleRow(r.id)} className="p-2.5 rounded-lg shrink-0 transition-transform duration-150 hover:scale-105" style={{ background: C.coralSoft, color: C.coral }}>
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                          {it && Number(r.qty) > 0 && (
-                            <div className="text-xs mt-1.5" style={{ color: C.textFaint }}>= {fmtIDR(it.sellPrice * Number(r.qty))} (modal {fmtIDR(it.costPrice * Number(r.qty))})</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <button type="button" onClick={addSaleRow} className="mt-2.5 flex items-center gap-1.5 text-sm font-medium transition-transform duration-150 hover:scale-[1.02]" style={{ color: C.jade }}>
-                    <PlusCircle size={14} /> Tambah Barang Lain
-                  </button>
-                  {saleCalc.count > 0 && (
-                    <div className="mt-3 p-3 rounded-xl grid grid-cols-3 gap-2 text-center" style={{ background: C.surface2 }}>
-                      <div><div className="text-[10px]" style={{ color: C.textFaint }}>Total</div><div className="text-xs font-semibold" style={{ color: C.text, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(saleCalc.revenue)}</div></div>
-                      <div><div className="text-[10px]" style={{ color: C.textFaint }}>Modal</div><div className="text-xs font-semibold" style={{ color: C.blue, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(saleCalc.modal)}</div></div>
-                      <div><div className="text-[10px]" style={{ color: C.textFaint }}>Untung</div><div className="text-xs font-semibold" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(saleProfit)}</div></div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </>
-      )}
-      {(type === "expense" || type === "goal" || type === "debt") && (
-        <Field label="Sumber Dana" C={C}>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setFundSource("keuntungan")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-              style={{ background: fundSource === "keuntungan" ? C.jadeSoft : C.surface2, color: fundSource === "keuntungan" ? C.jade : C.textMuted, border: `1px solid ${fundSource === "keuntungan" ? C.jade : C.border}` }}>
-              Keuntungan
-            </button>
-            <button type="button" onClick={() => setFundSource("modal")} className="py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-              style={{ background: fundSource === "modal" ? `${C.blue}22` : C.surface2, color: fundSource === "modal" ? C.blue : C.textMuted, border: `1px solid ${fundSource === "modal" ? C.blue : C.border}` }}>
-              Modal
-            </button>
-          </div>
-        </Field>
-      )}
-      {type === "expense" && !isEditing && (
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="block text-xs font-medium" style={{ color: C.textMuted }}>Kategori & Jumlah</span>
-            {items.length > 1 && <span className="text-xs" style={{ color: C.textFaint }}>Total: {fmtIDR(itemsTotal)}</span>}
-          </div>
-          <div className="space-y-2.5">
-            {items.map((it, idx) => (
-              <div key={it.id} className="p-2.5 rounded-xl" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
-                <div className="flex gap-2 items-center mb-2">
-                  <select value={it.category} onChange={(e) => updateItem(it.id, "category", e.target.value)} style={{ ...inputStyle(C), flex: "0 0 42%" }}>
-                    {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                  </select>
-                  <div className="flex-1"><AmountInput value={it.amount} onChange={(v) => updateItem(it.id, "amount", v)} C={C} /></div>
-                  {items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(it.id)} className="p-2.5 rounded-lg shrink-0 transition-transform duration-150 hover:scale-105" style={{ background: C.coralSoft, color: C.coral }}>
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-                <input value={it.note} onChange={(e) => updateItem(it.id, "note", e.target.value)} placeholder={`Catatan (opsional) untuk baris ${idx + 1}`} style={inputStyle(C)} />
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addItem} className="mt-2.5 flex items-center gap-1.5 text-sm font-medium transition-transform duration-150 hover:scale-[1.02]" style={{ color: C.jade }}>
-            <PlusCircle size={14} /> Tambah Kategori Lain
-          </button>
         </div>
       )}
-      {type === "goal" && !isEditing && (
-        <Field label="Target Tabungan" C={C}>
-          {goals.length === 0 ? <div className="text-xs py-2" style={{ color: C.textMuted }}>Belum ada target tabungan.</div> : (
-            <select value={goalId} onChange={(e) => setGoalId(e.target.value)} style={inputStyle(C)}>
-              {goals.map((g) => <option key={g.id} value={g.id}>{g.name} ({fmtIDR(g.current)} / {fmtIDR(g.target)})</option>)}
-            </select>
-          )}
-        </Field>
-      )}
-      {type === "debt" && !isEditing && (
-        <Field label="Hutang" C={C}>
-          {(!debts || debts.length === 0) ? <div className="text-xs py-2" style={{ color: C.textMuted }}>Belum ada data hutang.</div> : (
-            <>
-              <select value={debtId} onChange={(e) => setDebtId(e.target.value)} style={inputStyle(C)}>
-                {debts.map((d) => <option key={d.id} value={d.id}>{d.name} (sisa {fmtIDR(Math.max(0, d.amount - d.paidAmount))})</option>)}
-              </select>
-              {selectedDebt && <div className="text-xs mt-1.5" style={{ color: C.textMuted }}>Sisa hutang: {fmtIDR(remainingDebt)}</div>}
-            </>
-          )}
-        </Field>
-      )}
-      {(type !== "expense" || isEditing) && !(type === "income" && incomeMode === "items" && !isEditing && projectItems.length > 0) && (
-        <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
+
+      {tab === "consolidated" && (
+        <Card className="p-4 sm:p-6">
+          <p className="font-display font-extrabold text-lg mb-1">LAPORAN KONSOLIDASI — SEMUA TOKO</p>
+          <p className={cx("text-xs mb-4", dark ? "text-slate-400" : "text-slate-500")}>{fmtDate(monthRange[0])} – {fmtDate(monthRange[1])}</p>
+          <div className="space-y-2.5">
+            {consolidated.map((c) => (
+              <div key={c.store.id} className={cx("flex items-center justify-between p-3 rounded-xl border", dark ? "border-slate-700" : "border-slate-100")}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.store.logoColor }} />
+                  <div className="min-w-0"><p className="text-sm font-semibold truncate">{c.store.name}</p><p className={cx("text-[11px]", dark ? "text-slate-400" : "text-slate-500")}>Penjualan {fmtIDR(c.income)}</p></div>
+                </div>
+                <p className="font-display font-bold text-sm text-emerald-500 tabular shrink-0">{fmtIDR(c.profit)}</p>
+              </div>
+            ))}
+          </div>
+          <div className={cx("flex items-center justify-between p-3.5 rounded-xl mt-3 font-display font-extrabold", dark ? "bg-indigo-500/10 text-indigo-300" : "bg-indigo-50 text-indigo-700")}>
+            <span>TOTAL</span>
+            <span className="tabular">{fmtIDR(consolidated.reduce((a, c) => a + c.profit, 0))}</span>
+          </div>
+        </Card>
       )}
 
-      <Field label="Tanggal" C={C}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle(C)} /></Field>
-      {type === "income" && <Field label={incomeMode === "items" && !isEditing ? "Catatan (opsional, otomatis terisi)" : "Catatan"} C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
-      {type === "expense" && isEditing && <Field label="Catatan" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh: Pembayaran material" style={inputStyle(C)} /></Field>}
-      {(type === "goal" || type === "debt") && !isEditing && <Field label="Catatan (opsional)" C={C}><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Otomatis terisi jika dikosongkan" style={inputStyle(C)} /></Field>}
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Transaksi"}</button>
-    </Modal>
+      <Modal open={waOpen} onClose={() => setWaOpen(false)} title="Kirim Laporan Harian">
+        <div className="space-y-4">
+          <pre className={cx("text-xs whitespace-pre-wrap p-3 rounded-xl border font-body", dark ? "bg-slate-900 border-slate-700" : "bg-slate-50 border-slate-200")}>
+            {buildWaMessage({ storeName: store?.name, date, sales: daySales, expenses: dayExpenses, handoverAmount: dayHanded })}
+          </pre>
+          <WhatsAppSendRow message={buildWaMessage({ storeName: store?.name, date, sales: daySales, expenses: dayExpenses, handoverAmount: dayHanded })} store={store} />
+        </div>
+      </Modal>
+    </div>
   );
 }
-
-function AddGoalModal({ open, onClose, C, projects, editing, onSave }) {
-  const [name, setName] = useState("");
-  const [projectId, setProjectId] = useState("all");
-  const [target, setTarget] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const isEditing = !!editing;
-  useEffect(() => {
-    if (open && editing) { setName(editing.name); setProjectId(editing.projectId); setTarget(String(editing.target)); setDeadline(editing.deadline); }
-    else if (open && !editing) { setName(""); setProjectId("all"); setTarget(""); setDeadline(""); }
-  }, [open, editing]);
-  const submit = () => {
-    const t = Number(String(target).replace(/[^0-9]/g, ''));
-    if (!name || !t || !deadline) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, target: t, deadline }); onClose();
-  };
+function ReportRow({ label, value, tone, bold }) {
+  const { dark } = useApp();
+  const colors = { green: "text-emerald-500", red: "text-rose-500", indigo: "text-indigo-500", amber: "text-amber-500" };
   return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Target Tabungan" : "Target Tabungan Baru"} C={C}>
-      <Field label="Nama Target" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Dana Renovasi" style={inputStyle(C)} /></Field>
-      <Field label="Projek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}><option value="all">Seluruh Kawasan</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Target Dana (Rp)" C={C}><AmountInput value={target} onChange={setTarget} C={C} /></Field>
-      <Field label="Tenggat" C={C}><input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={inputStyle(C)} /></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Buat Target"}</button>
-    </Modal>
+    <div className="flex items-center justify-between px-4 py-3">
+      <span className={cx("text-sm", dark ? "text-slate-400" : "text-slate-500")}>{label}</span>
+      <span className={cx("text-sm tabular", bold ? "font-display font-extrabold text-base" : "font-semibold", tone && colors[tone])}>{value}</span>
+    </div>
   );
 }
 
-function AddBillModal({ open, onClose, C, projects, categories, editing, onSave }) {
-  const [name, setName] = useState("");
-  const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [category, setCategory] = useState(categories[0]?.id || "");
-  const [amount, setAmount] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [recurring, setRecurring] = useState("Bulanan");
-  const isEditing = !!editing;
-  useEffect(() => {
-    if (open && editing) { setName(editing.name); setProjectId(editing.projectId); setCategory(editing.category || categories[0]?.id); setAmount(String(editing.amount)); setDueDate(editing.dueDate); setRecurring(editing.recurring); }
-    else if (open && !editing) { setName(""); setProjectId(projects[0]?.id || ""); setCategory(categories[0]?.id || ""); setAmount(""); setDueDate(""); setRecurring("Bulanan"); }
-  }, [open, editing, projects, categories]);
-  const submit = () => {
-    const a = Number(String(amount).replace(/[^0-9]/g, ''));
-    if (!name || !a || !dueDate) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, category, amount: a, dueDate, recurring }); onClose();
-  };
-  return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Tagihan" : "Tagihan Baru"} C={C}>
-      <Field label="Nama Tagihan" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Listrik PLN" style={inputStyle(C)} /></Field>
-      <Field label="Projek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length === 0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
-      <Field label="Jumlah (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
-      <Field label="Jatuh Tempo" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
-      <Field label="Pengulangan" C={C}><select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>{["Bulanan", "Tahunan", "Sekali"].map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Tagihan"}</button>
-    </Modal>
-  );
-}
+/* ============================================================
+   PRODUCTS / STOCK PAGE
+   ============================================================ */
+function ProductsPage() {
+  const { dark, db, setDb, activeStoreId, notify, activeStores } = useApp();
+  const [storeId, setStoreId] = useState(activeStoreId !== "all" ? activeStoreId : activeStores[0]?.id || "");
+  const [modal, setModal] = useState(null); // {mode:'new'|'edit', data}
+  const [stockModal, setStockModal] = useState(null);
 
-function AddProjectModal({ open, onClose, C, editing, onSave }) {
-  const [name, setName] = useState("");
-  const [location, setLocation] = useState("");
-  const [budget, setBudget] = useState("");
-  const [manager, setManager] = useState("");
-  const [desc, setDesc] = useState("");
-  const isEditing = !!editing;
-  useEffect(() => {
-    if (open && editing) {
-      setName(editing.name); setLocation(editing.location); setBudget(String(editing.budget));
-      setManager(editing.manager || ""); setDesc(editing.desc || "");
-    } else if (open && !editing) {
-      setName(""); setLocation(""); setBudget(""); setManager(""); setDesc("");
+  const products = db.products.filter((p) => p.storeId === storeId);
+  const lowStock = products.filter((p) => p.stock <= p.minStock);
+
+  const openNew = () => setModal({ mode: "new", data: { name: "", sku: "", category: "Umum", price: "", cost: "", stock: 0, minStock: 5, status: "active" } });
+  const openEdit = (p) => setModal({ mode: "edit", data: { ...p } });
+
+  const saveProduct = (data) => {
+    if (!data.name || !storeId) { notify("Nama produk wajib diisi", "red"); return; }
+    if (modal.mode === "new") {
+      setDb((d) => ({ ...d, products: [...d.products, { ...data, id: uid("prod"), storeId, price: Number(data.price), cost: Number(data.cost), stock: Number(data.stock), minStock: Number(data.minStock) }] }));
+      notify("Produk ditambahkan");
+    } else {
+      setDb((d) => ({ ...d, products: d.products.map((p) => p.id === data.id ? { ...data, price: Number(data.price), cost: Number(data.cost), stock: Number(data.stock), minStock: Number(data.minStock) } : p) }));
+      notify("Produk diperbarui");
     }
-  }, [open, editing]);
-  const submit = () => {
-    const b = Number(String(budget).replace(/[^0-9]/g, ''));
-    if (!name || !location || !b) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, location, budget: b, manager, desc });
-    onClose();
+    setModal(null);
   };
-  return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Projek" : "Projek Baru"} C={C}>
-      <Field label="Nama Projek" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Villa Amerta" style={inputStyle(C)} /></Field>
-      <Field label="Lokasi" C={C}><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Contoh: Nusa Dua, Bali" style={inputStyle(C)} /></Field>
-      <Field label="Anggaran Bulanan (Rp)" C={C}><AmountInput value={budget} onChange={setBudget} C={C} /></Field>
-      <Field label="Penanggung Jawab" C={C}><input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="Nama PJ projek" style={inputStyle(C)} /></Field>
-      <Field label="Deskripsi" C={C}><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Deskripsi singkat projek" style={inputStyle(C)} /></Field>
+  const removeProduct = (id) => { if (confirm("Hapus produk ini?")) { setDb((d) => ({ ...d, products: d.products.filter((p) => p.id !== id) })); notify("Produk dihapus", "red"); } };
 
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Tambah Projek"}</button>
-    </Modal>
-  );
-}
-
-function AddDebtModal({ open, onClose, C, projects, editing, onSave }) {
-  const [name, setName] = useState("");
-  const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [amount, setAmount] = useState("");
-  const [paidAmount, setPaidAmount] = useState("0");
-  const [dueDate, setDueDate] = useState("");
-  const [recurring, setRecurring] = useState("Cicilan Bulanan");
-  const isEditing = !!editing;
-  useEffect(() => {
-    if (open && editing) { setName(editing.name); setProjectId(editing.projectId); setAmount(String(editing.amount)); setPaidAmount(String(editing.paidAmount ?? 0)); setDueDate(editing.dueDate); setRecurring(editing.recurring); }
-    else if (open && !editing) { setName(""); setProjectId(projects[0]?.id || ""); setAmount(""); setPaidAmount("0"); setDueDate(""); setRecurring("Cicilan Bulanan"); }
-  }, [open, editing, projects]);
-  const submit = () => {
-    const a = Number(String(amount).replace(/[^0-9]/g, ''));
-    const p = Number(String(paidAmount).replace(/[^0-9]/g, ''));
-    if (!name || !a || !dueDate) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), name, projectId, amount: a, paidAmount: p || 0, dueDate, recurring }); onClose();
+  const adjustStock = (id, delta, reason) => {
+    setDb((d) => ({ ...d, products: d.products.map((p) => p.id === id ? { ...p, stock: Math.max(p.stock + delta, 0) } : p) }));
+    notify(`Stok ${delta > 0 ? "masuk" : "keluar"} dicatat`);
+    setStockModal(null);
   };
-  return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Hutang" : "Hutang Baru"} C={C}>
-      <Field label="Nama Hutang / Kreditur" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Pinjaman Bank Modal Kerja" style={inputStyle(C)} /></Field>
-      <Field label="Projek" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length === 0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Total Hutang (Rp)" C={C}><AmountInput value={amount} onChange={setAmount} C={C} /></Field>
-      <Field label="Sudah Dibayar (Rp)" C={C}><AmountInput value={paidAmount} onChange={setPaidAmount} C={C} /></Field>
-      <Field label="Jatuh Tempo / Target Lunas" C={C}><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle(C)} /></Field>
-      <Field label="Skema" C={C}><select value={recurring} onChange={(e) => setRecurring(e.target.value)} style={inputStyle(C)}>{["Cicilan Bulanan", "Sekali", "Tahunan"].map((r) => <option key={r} value={r}>{r}</option>)}</select></Field>
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Hutang"}</button>
-    </Modal>
-  );
-}
 
-function AddPersonModal({ open, onClose, C, projects, editing, onSave }) {
-  const [category, setCategory] = useState("staff-l");
-  const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [name, setName] = useState("");
-  const [fatherName, setFatherName] = useState("");
-  const [motherName, setMotherName] = useState("");
-  const [birthPlace, setBirthPlace] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [spouseName, setSpouseName] = useState("");
-  const [childrenCount, setChildrenCount] = useState("0");
-  const isEditing = !!editing;
-  useEffect(() => {
-    if (open && editing) { setCategory(editing.category); setProjectId(editing.projectId); setName(editing.name); setFatherName(editing.fatherName || ""); setMotherName(editing.motherName || ""); setBirthPlace(editing.birthPlace || ""); setBirthDate(editing.birthDate || ""); setSpouseName(editing.spouseName || ""); setChildrenCount(String(editing.childrenCount ?? 0)); }
-    else if (open && !editing) { setCategory("staff-l"); setProjectId(projects[0]?.id || ""); setName(""); setFatherName(""); setMotherName(""); setBirthPlace(""); setBirthDate(""); setSpouseName(""); setChildrenCount("0"); }
-  }, [open, editing, projects]);
-  const isChild = category === "anak";
-  const submit = () => {
-    const cc = Number(String(childrenCount).replace(/[^0-9]/g, ''));
-    if (!name) return;
-    onSave({ ...(isEditing ? { id: editing.id } : {}), category, projectId, name, fatherName, motherName, birthPlace, birthDate, spouseName: isChild ? "" : spouseName, childrenCount: isChild ? 0 : cc || 0 }); onClose();
-  };
   return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Edit Data Ahli" : "Tambah Data Ahli"} C={C}>
-      <Field label="Kategori" C={C}><select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle(C)}>{PEOPLE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></Field>
-      <Field label="Projek / Kawasan" C={C}><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle(C)}>{projects.length === 0 && <option value="">(Kosong)</option>}{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-      <Field label="Nama Lengkap" C={C}><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama lengkap" style={inputStyle(C)} /></Field>
-      <Field label="Nama Ayah" C={C}><input value={fatherName} onChange={(e) => setFatherName(e.target.value)} placeholder="Nama ayah" style={inputStyle(C)} /></Field>
-      <Field label="Nama Ibu" C={C}><input value={motherName} onChange={(e) => setMotherName(e.target.value)} placeholder="Nama ibu" style={inputStyle(C)} /></Field>
-      <Field label="Tempat Lahir" C={C}><input value={birthPlace} onChange={(e) => setBirthPlace(e.target.value)} placeholder="Contoh: Mataram" style={inputStyle(C)} /></Field>
-      <Field label="Tanggal Lahir" C={C}><input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={inputStyle(C)} /></Field>
-      {!isChild && (
-        <>
-          <Field label="Nama Istri / Suami" C={C}><input value={spouseName} onChange={(e) => setSpouseName(e.target.value)} placeholder="Kosongkan jika belum menikah" style={inputStyle(C)} /></Field>
-          <Field label="Jumlah Anak" C={C}><input type="text" inputMode="numeric" min="0" value={childrenCount} onChange={(e) => setChildrenCount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" style={inputStyle(C)} /></Field>
-        </>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 justify-between">
+        <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-52">
+          <option value="">Pilih toko</option>
+          {activeStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </Select>
+        <Btn variant="primary" size="sm" onClick={openNew} disabled={!storeId}><Plus size={14} /> Tambah Produk</Btn>
+      </div>
+
+      {lowStock.length > 0 && (
+        <div className={cx("flex items-center gap-2 p-3 rounded-xl border text-xs", dark ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-700")}>
+          <AlertTriangle size={15} className="shrink-0" /> {lowStock.length} produk stok menipis: {lowStock.map((p) => p.name).join(", ")}
+        </div>
       )}
-      <button onClick={submit} className="w-full py-2.5 rounded-lg font-medium mt-2 transition-transform duration-150 hover:scale-[1.01] active:scale-95" style={{ background: C.jade, color: "#08130F" }}>{isEditing ? "Simpan Perubahan" : "Simpan Data"}</button>
-    </Modal>
+
+      <Card className="overflow-hidden">
+        {!storeId ? <EmptyState icon={Package} title="Pilih toko untuk melihat produk" /> :
+          products.length === 0 ? <EmptyState icon={Package} title="Belum ada produk" desc="Tambahkan produk pertama untuk toko ini." /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className={cx("text-[11px] uppercase tracking-wide", dark ? "text-slate-400 bg-slate-800/50" : "text-slate-500 bg-slate-50")}>
+                <tr><Th>Produk</Th><Th>SKU</Th><Th className="text-right">Harga Jual</Th><Th className="text-right">Modal</Th><Th className="text-right">Stok</Th><Th>Status</Th><Th className="text-right">Aksi</Th></tr>
+              </thead>
+              <tbody>
+                {products.map((p) => (
+                  <tr key={p.id} className={cx("border-t", dark ? "border-slate-800 hover:bg-slate-800/40" : "border-slate-100 hover:bg-slate-50")}>
+                    <Td className="font-medium">{p.name}</Td>
+                    <Td className={dark ? "text-slate-400" : "text-slate-500"}>{p.sku}</Td>
+                    <Td className="text-right tabular">{fmtIDR(p.price)}</Td>
+                    <Td className="text-right tabular">{fmtIDR(p.cost)}</Td>
+                    <Td className="text-right">
+                      <button onClick={() => setStockModal(p)} className={cx("tabular font-semibold px-2 py-0.5 rounded-lg", p.stock <= p.minStock ? "bg-amber-500/15 text-amber-500" : dark ? "bg-slate-700 text-slate-200" : "bg-slate-100 text-slate-700")}>{p.stock}</button>
+                    </Td>
+                    <Td><Badge tone={p.status === "active" ? "green" : "neutral"}>{p.status === "active" ? "Aktif" : "Nonaktif"}</Badge></Td>
+                    <Td className="text-right"><RowActions onView={() => openEdit(p)} onDelete={() => removeProduct(p.id)} /></Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.mode === "new" ? "Tambah Produk" : "Edit Produk"}>
+        {modal && <ProductForm data={modal.data} onSave={saveProduct} />}
+      </Modal>
+
+      <Modal open={!!stockModal} onClose={() => setStockModal(null)} title={`Sesuaikan Stok — ${stockModal?.name}`}>
+        {stockModal && <StockAdjustForm product={stockModal} onSave={adjustStock} />}
+      </Modal>
+    </div>
+  );
+}
+function ProductForm({ data, onSave }) {
+  const [form, setForm] = useState(data);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  return (
+    <div className="space-y-3">
+      <Field label="Nama produk" required><Input value={form.name} onChange={set("name")} /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="SKU / Kode"><Input value={form.sku} onChange={set("sku")} /></Field>
+        <Field label="Kategori"><Input value={form.category} onChange={set("category")} /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Harga jual (Rp)" required><Input type="number" value={form.price} onChange={set("price")} /></Field>
+        <Field label="Harga modal (Rp)"><Input type="number" value={form.cost} onChange={set("cost")} /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Stok"><Input type="number" value={form.stock} onChange={set("stock")} /></Field>
+        <Field label="Stok minimum"><Input type="number" value={form.minStock} onChange={set("minStock")} /></Field>
+      </div>
+      <Field label="Status">
+        <Select value={form.status} onChange={set("status")}><option value="active">Aktif</option><option value="inactive">Nonaktif</option></Select>
+      </Field>
+      <Btn variant="primary" className="w-full" onClick={() => onSave(form)}>Simpan Produk</Btn>
+    </div>
+  );
+}
+function StockAdjustForm({ product, onSave }) {
+  const [qty, setQty] = useState(1);
+  const [reason, setReason] = useState("");
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-center">Stok saat ini: <span className="font-bold">{product.stock}</span></p>
+      <Field label="Jumlah"><Input type="number" min={1} value={qty} onChange={(e) => setQty(Number(e.target.value) || 1)} /></Field>
+      <Field label="Alasan / catatan"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="cth. Restock mingguan" /></Field>
+      <div className="flex gap-2">
+        <Btn variant="green" className="flex-1" onClick={() => onSave(product.id, qty, reason)}>+ Stok Masuk</Btn>
+        <Btn variant="red" className="flex-1" onClick={() => onSave(product.id, -qty, reason)}>− Stok Keluar</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   STORES PAGE
+   ============================================================ */
+function StoresPage() {
+  const { dark, db, setDb, notify } = useApp();
+  const [modal, setModal] = useState(null);
+
+  const openNew = () => setModal({ mode: "new", data: { name: "", address: "", whatsapp: "", owner: "", pic: "", initialBalance: 0, initialCapital: 0, status: "active", logoColor: CHART_COLORS[db.stores.length % CHART_COLORS.length] } });
+  const openEdit = (s) => setModal({ mode: "edit", data: { ...s } });
+
+  const save = (data) => {
+    if (!data.name.trim()) { notify("Nama toko wajib diisi", "red"); return; }
+    if (modal.mode === "new") {
+      setDb((d) => ({ ...d, stores: [...d.stores, { ...data, id: uid("st"), initialBalance: Number(data.initialBalance), initialCapital: Number(data.initialCapital) }] }));
+      notify("Toko baru ditambahkan");
+    } else {
+      setDb((d) => ({ ...d, stores: d.stores.map((s) => s.id === data.id ? { ...data, initialBalance: Number(data.initialBalance), initialCapital: Number(data.initialCapital) } : s) }));
+      notify("Toko diperbarui");
+    }
+    setModal(null);
+  };
+  const toggleStatus = (s) => setDb((d) => ({ ...d, stores: d.stores.map((x) => x.id === s.id ? { ...x, status: x.status === "active" ? "nonactive" : "active" } : x) }));
+  const removeStore = (id) => { if (confirm("Hapus toko ini? Semua data terkait akan tersembunyi.")) { setDb((d) => ({ ...d, stores: d.stores.filter((s) => s.id !== id) })); notify("Toko dihapus", "red"); } };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className={cx("text-xs", dark ? "text-slate-400" : "text-slate-500")}>{db.stores.length} toko terdaftar</p>
+        <Btn variant="primary" size="sm" onClick={openNew}><Plus size={14} /> Tambah Toko</Btn>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {db.stores.map((s) => (
+          <Card key={s.id} className="p-4 sm:p-5 animate-fadeUp">
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-display font-bold" style={{ background: s.logoColor }}>
+                {s.name.replace("Toko ", "").charAt(0)}
+              </div>
+              <Badge tone={s.status === "active" ? "green" : "neutral"}>{s.status === "active" ? "Aktif" : "Nonaktif"}</Badge>
+            </div>
+            <p className="font-display font-bold text-sm truncate">{s.name}</p>
+            <p className={cx("text-xs mt-0.5 flex items-center gap-1 truncate", dark ? "text-slate-400" : "text-slate-500")}><MapPin size={11} className="shrink-0" /> {s.address}</p>
+            <p className={cx("text-xs mt-1 flex items-center gap-1", dark ? "text-slate-400" : "text-slate-500")}><Phone size={11} className="shrink-0" /> +{s.whatsapp}</p>
+            <div className={cx("grid grid-cols-2 gap-2 mt-3 pt-3 border-t text-xs", dark ? "border-slate-700" : "border-slate-100")}>
+              <div><p className={dark ? "text-slate-500" : "text-slate-400"}>Pemilik</p><p className="font-semibold">{s.owner}</p></div>
+              <div><p className={dark ? "text-slate-500" : "text-slate-400"}>PJ</p><p className="font-semibold">{s.pic}</p></div>
+              <div><p className={dark ? "text-slate-500" : "text-slate-400"}>Modal</p><p className="font-semibold">{fmtIDRshort(s.initialCapital)}</p></div>
+              <div><p className={dark ? "text-slate-500" : "text-slate-400"}>Saldo awal</p><p className="font-semibold">{fmtIDRshort(s.initialBalance)}</p></div>
+            </div>
+            <div className="flex gap-2 mt-3.5">
+              <Btn variant="ghost" size="sm" className="flex-1" onClick={() => openEdit(s)}><Edit2 size={12} /> Edit</Btn>
+              <Btn variant="subtle" size="sm" className="flex-1" onClick={() => toggleStatus(s)}>{s.status === "active" ? "Nonaktifkan" : "Aktifkan"}</Btn>
+              <button onClick={() => removeStore(s.id)} className="p-2 rounded-xl text-rose-500 hover:bg-rose-500/10"><Trash2 size={14} /></button>
+            </div>
+          </Card>
+        ))}
+      </div>
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.mode === "new" ? "Tambah Toko Baru" : "Edit Toko"} wide>
+        {modal && <StoreForm data={modal.data} onSave={save} />}
+      </Modal>
+    </div>
+  );
+}
+function StoreForm({ data, onSave }) {
+  const [form, setForm] = useState(data);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  return (
+    <div className="space-y-3">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Nama toko" required><Input value={form.name} onChange={set("name")} /></Field>
+        <Field label="No. WhatsApp" required hint="Format: 62xxxxxxxxxx"><Input value={form.whatsapp} onChange={set("whatsapp")} placeholder="6281234567890" /></Field>
+      </div>
+      <Field label="Alamat"><Textarea rows={2} value={form.address} onChange={set("address")} /></Field>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Nama pemilik"><Input value={form.owner} onChange={set("owner")} /></Field>
+        <Field label="Penanggung jawab"><Input value={form.pic} onChange={set("pic")} /></Field>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Saldo awal (Rp)"><Input type="number" value={form.initialBalance} onChange={set("initialBalance")} /></Field>
+        <Field label="Modal awal (Rp)"><Input type="number" value={form.initialCapital} onChange={set("initialCapital")} /></Field>
+      </div>
+      <Field label="Status">
+        <Select value={form.status} onChange={set("status")}><option value="active">Aktif</option><option value="nonactive">Nonaktif</option></Select>
+      </Field>
+      <Btn variant="primary" className="w-full" onClick={() => onSave(form)}>Simpan Toko</Btn>
+    </div>
+  );
+}
+
+/* ============================================================
+   SETTINGS PAGE
+   ============================================================ */
+function SettingsPage() {
+  const { dark, user, db } = useApp();
+  return (
+    <div className="max-w-xl space-y-4">
+      <Card className="p-4 sm:p-5">
+        <p className="font-display font-bold text-sm mb-3">Akun</p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-indigo-600 text-white flex items-center justify-center font-display font-bold">{user.name.charAt(0)}</div>
+          <div><p className="text-sm font-semibold">{user.name}</p><Badge tone="indigo">{ROLES.find((r) => r.id === user.role)?.label}</Badge></div>
+        </div>
+      </Card>
+      <Card className="p-4 sm:p-5">
+        <p className="font-display font-bold text-sm mb-3">WhatsApp Report</p>
+        <p className={cx("text-xs mb-3", dark ? "text-slate-400" : "text-slate-500")}>Nomor tujuan laporan diambil dari data masing-masing toko (menu Kelola Toko). Saat ini menggunakan WhatsApp Click-to-Chat — siap dikembangkan ke WhatsApp Business API.</p>
+        <div className="space-y-2">
+          {db.stores.map((s) => (
+            <div key={s.id} className="flex items-center justify-between text-xs">
+              <span className="font-medium">{s.name}</span>
+              <span className={dark ? "text-slate-400" : "text-slate-500"}>+{s.whatsapp}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card className="p-4 sm:p-5">
+        <p className="font-display font-bold text-sm mb-2">Tentang Data</p>
+        <p className={cx("text-xs leading-relaxed", dark ? "text-slate-400" : "text-slate-500")}>
+          Data tersimpan otomatis dan aman di penyimpanan pribadi akun Anda. Setiap transaksi selalu menyertakan store_id sehingga keuangan antar toko tidak tercampur.
+        </p>
+      </Card>
+    </div>
   );
 }
