@@ -428,7 +428,10 @@ export default function App() {
   const [itemModal, setItemModal] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
 
+  // Tunggu sesi login selesai dipastikan dulu (user tidak null) sebelum ambil data —
+  // supaya tidak "keduluan" dan ditolak oleh aturan akses (RLS) yang sekarang mewajibkan login.
   useEffect(() => {
+    if (!user) return;
     (async () => {
       const data = await loadAppData();
       if (data) {
@@ -445,9 +448,10 @@ export default function App() {
       }
       setLoaded(true);
     })();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
     const unsubscribe = subscribeAppData((data) => {
       if (!data) return;
       skipNextSave.current = true;
