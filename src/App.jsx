@@ -8,7 +8,7 @@ import {
   MoreHorizontal, ArrowUpRight, ArrowDownRight, Search, ChevronDown,
   Landmark, Sparkles, Clock, PlusCircle, LogOut, ShieldCheck, UserCog, Lock, Menu,
   CreditCard, Droplet, Home, HandCoins, Users2, ArrowRightLeft, Baby, User, Pencil, Tag,
-  Calculator, Delete, Cake, Share2
+  Calculator, Delete, Cake, Share2, ShoppingCart, Minus, Check
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar,
@@ -571,6 +571,7 @@ export default function App() {
 
   const NAV = [
     { id: "dashboard", label: "Dasbor", icon: LayoutDashboard },
+    { id: "kasir", label: "Kasir", icon: ShoppingCart },
     { id: "projects", label: "PROJEK", icon: Building2 },
     { id: "keuangan", label: "Keuangan", icon: Wallet },
     { id: "people", label: "Ahli", icon: Users2 },
@@ -641,14 +642,17 @@ export default function App() {
         </div>
         <main className="flex-1 min-w-0 px-4 sm:px-8 py-6 md:py-8 pt-20 md:pt-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full">
           {tab === "dashboard" && <Dashboard {...{ C, isDark, projects, totals, monthSpend, monthBudget, debtsSummary, categoryBreakdown, monthlyTrend, upcomingBills, scopedTx, activeProject, projectName, projectColor, setTab, setTxModal, people, getCat, getProject }} />}
+          {tab === "kasir" && <KasirView {...{ C, projects, items, activeProject, setActiveProject, onCheckout: (sale) => setTransactions((prev) => [{ id: uid("t"), type: "income", category: categories[0]?.id, date: new Date().toISOString().slice(0, 10), ...sale }, ...prev]) }} />}
           {tab === "projects" && <ProjectsView {...{ C, projects, transactions, setActiveProject, setTab, setProjModal, isAdmin, getProject }} />}
           {tab === "keuangan" && <KeuanganView {...{ C, transactions, projects, activeProject, projectName, projectColor, setTxModal, setTransactions, isAdmin, categories, getCat, onManageCat: () => setCatModal(true), thisMonthKey, goals, setGoals, setGoalModal, bills, setBills, setBillModal, debts, setDebts, setDebtModal, categoryBreakdown, monthlyTrend, projectComparison, totals, getProject, funds, setFunds, getFundBalance, items, setItems, setItemModal }} />}
           {tab === "people" && <PeopleView {...{ C, people, setPeople, projects, projectName, setPersonModal, isAdmin, activeProject }} />}
         </main>
       </div>
-      <button onClick={() => setTxModal("new")} className="fixed bottom-20 md:bottom-6 right-6 z-30 flex items-center gap-2 px-5 py-3.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, color: "#08130F", fontWeight: 600, boxShadow: C.shadowLg }}>
-        <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
-      </button>
+      {tab !== "kasir" && (
+        <button onClick={() => setTxModal("new")} className="fixed bottom-20 md:bottom-6 right-6 z-30 flex items-center gap-2 px-5 py-3.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})`, color: "#08130F", fontWeight: 600, boxShadow: C.shadowLg }}>
+          <Plus size={18} /> <span className="hidden sm:inline">Transaksi</span>
+        </button>
+      )}
       <AddTransactionModal
         open={!!txModal} editing={txModal && txModal !== "new" ? txModal : null} onClose={() => setTxModal(null)}
         C={C} projects={projects} goals={goals} debts={debts} categories={categories} productItems={items}
@@ -740,6 +744,178 @@ function SyncFooter({ syncState, isDark, setIsDark, C, user, onLogout }) {
       <button onClick={() => setIsDark((d) => !d)} className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200" style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}>
         {isDark ? <Sun size={15} /> : <Moon size={15} />} {isDark ? "Mode Terang" : "Mode Gelap"}
       </button>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   KASIR — tampilan ala POS restoran: grid menu, keranjang, bayar
+----------------------------------------------------------------*/
+function KasirView({ C, projects, items, activeProject, setActiveProject, onCheckout }) {
+  const kasirProjectId = activeProject !== "all" ? activeProject : (projects[0]?.id || "");
+  const [cart, setCart] = useState({}); // { itemId: qty }
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [success, setSuccess] = useState(null);
+
+  const projectItems = items.filter((it) => it.projectId === kasirProjectId);
+
+  const addToCart = (id) => setCart((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+  const decFromCart = (id) => setCart((prev) => {
+    const next = { ...prev };
+    if (!next[id]) return next;
+    next[id] -= 1;
+    if (next[id] <= 0) delete next[id];
+    return next;
+  });
+  const removeFromCart = (id) => setCart((prev) => { const next = { ...prev }; delete next[id]; return next; });
+  const clearCart = () => setCart({});
+
+  const cartLines = Object.entries(cart).map(([id, qty]) => {
+    const item = items.find((it) => it.id === id);
+    return item ? { item, qty } : null;
+  }).filter(Boolean);
+  const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
+  const cartTotal = cartLines.reduce((s, l) => s + l.qty * l.item.sellPrice, 0);
+  const cartModal = cartLines.reduce((s, l) => s + l.qty * l.item.costPrice, 0);
+  const cartProfit = cartTotal - cartModal;
+
+  const bayar = () => {
+    if (cartLines.length === 0) return;
+    const note = cartLines.map((l) => `${l.qty}x ${l.item.name}`).join(", ");
+    onCheckout({
+      projectId: kasirProjectId,
+      amount: cartTotal,
+      splitModal: cartModal,
+      splitProfit: cartProfit,
+      note,
+      paymentMethod,
+    });
+    setSuccess({ note, total: cartTotal });
+    clearCart();
+    setTimeout(() => setSuccess(null), 2500);
+  };
+
+  if (projects.length === 0) {
+    return <div className="text-sm" style={{ color: C.textFaint }}>Buat projek dulu sebelum memakai Kasir.</div>;
+  }
+
+  return (
+    <div className="lb-anim">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${C.jade}, ${C.blue})` }}>
+            <ShoppingCart size={18} color="#08130F" />
+          </div>
+          <div>
+            <h2 style={{ fontFamily: "Fraunces, serif", fontWeight: 700, fontSize: 22, color: C.text }}>Kasir</h2>
+            <p className="text-xs" style={{ color: C.textMuted }}>Pilih menu, lalu proses pembayaran</p>
+          </div>
+        </div>
+        <select value={kasirProjectId} onChange={(e) => setActiveProject(e.target.value)} style={{ ...inputStyle(C), width: "auto" }}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+
+      {success && (
+        <div className="mb-4 p-4 rounded-2xl flex items-center gap-3" style={{ background: C.jadeSoft, border: `1px solid ${C.jade}` }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: C.jade }}><Check size={18} color="#08130F" /></div>
+          <div>
+            <div className="text-sm font-semibold" style={{ color: C.jade }}>Pembayaran berhasil — {fmtIDR(success.total)}</div>
+            <div className="text-xs" style={{ color: C.textMuted }}>{success.note}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-5 gap-5">
+        {/* GRID MENU */}
+        <div className="lg:col-span-3">
+          {projectItems.length === 0 ? (
+            <Card C={C} className="text-center py-12">
+              <div className="text-sm" style={{ color: C.textFaint }}>Belum ada barang untuk projek ini.</div>
+              <div className="text-xs mt-1" style={{ color: C.textFaint }}>Tambahkan dulu di Keuangan → Barang.</div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {projectItems.map((it) => {
+                const qty = cart[it.id] || 0;
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => addToCart(it.id)}
+                    className="relative p-3.5 rounded-2xl text-left transition-all duration-150 hover:scale-[1.03] active:scale-95"
+                    style={{ background: qty > 0 ? C.jadeSoft : C.surface, border: `2px solid ${qty > 0 ? C.jade : C.border}` }}
+                  >
+                    {qty > 0 && (
+                      <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: C.jade, color: "#08130F" }}>{qty}</span>
+                    )}
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-2.5" style={{ background: `${C.gold}22` }}>
+                      <Package size={16} color={C.gold} />
+                    </div>
+                    <div className="text-sm font-semibold mb-0.5 line-clamp-2" style={{ color: C.text, fontFamily: "Fraunces, serif" }}>{it.name}</div>
+                    <div className="text-xs font-medium" style={{ color: C.jade, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(it.sellPrice)}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* KERANJANG */}
+        <div className="lg:col-span-2">
+          <Card C={C} pad="p-0" className="sticky top-4">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <h3 className="flex items-center gap-2" style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 16, color: C.text }}>
+                <ShoppingCart size={16} /> Keranjang {cartCount > 0 && <Badge C={C} tone="jade">{cartCount}</Badge>}
+              </h3>
+              {cartLines.length > 0 && <button onClick={clearCart} className="text-xs font-medium" style={{ color: C.coral }}>Kosongkan</button>}
+            </div>
+            {cartLines.length === 0 ? (
+              <div className="px-5 pb-6 text-sm text-center py-6" style={{ color: C.textFaint }}>Keranjang masih kosong.<br />Tap menu di sebelah untuk menambah.</div>
+            ) : (
+              <div className="px-5 pb-3 space-y-2 max-h-72 overflow-y-auto">
+                {cartLines.map((l) => (
+                  <div key={l.item.id} className="flex items-center gap-2 p-2.5 rounded-xl" style={{ background: C.surface2 }}>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate" style={{ color: C.text }}>{l.item.name}</div>
+                      <div className="text-xs" style={{ color: C.textFaint, fontFamily: "JetBrains Mono, monospace" }}>{fmtIDR(l.item.sellPrice)} x {l.qty}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => decFromCart(l.item.id)} className="w-7 h-7 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.surface, color: C.textMuted, border: `1px solid ${C.border}` }}><Minus size={12} /></button>
+                      <span className="w-5 text-center text-sm font-semibold" style={{ color: C.text }}>{l.qty}</span>
+                      <button onClick={() => addToCart(l.item.id)} className="w-7 h-7 rounded-full flex items-center justify-center transition-transform duration-150 hover:scale-110" style={{ background: C.jadeSoft, color: C.jade }}><PlusCircle size={12} /></button>
+                    </div>
+                    <div className="text-sm font-semibold shrink-0 w-20 text-right" style={{ fontFamily: "JetBrains Mono, monospace", color: C.text }}>{fmtIDR(l.item.sellPrice * l.qty)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {cartLines.length > 0 && (
+              <>
+                <div className="px-5 py-3" style={{ borderTop: `1px solid ${C.borderSoft}` }}>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button onClick={() => setPaymentMethod("cash")} className="py-2 rounded-lg text-sm font-medium transition-all duration-150" style={{ background: paymentMethod === "cash" ? C.jadeSoft : C.surface2, color: paymentMethod === "cash" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "cash" ? C.jade : C.border}` }}>Cash</button>
+                    <button onClick={() => setPaymentMethod("online")} className="py-2 rounded-lg text-sm font-medium transition-all duration-150" style={{ background: paymentMethod === "online" ? C.jadeSoft : C.surface2, color: paymentMethod === "online" ? C.jade : C.textMuted, border: `1px solid ${paymentMethod === "online" ? C.jade : C.border}` }}>Online</button>
+                  </div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm" style={{ color: C.textMuted }}>Total</span>
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: C.text }}>{fmtIDR(cartTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs" style={{ color: C.textFaint }}>
+                    <span>Modal {fmtIDR(cartModal)}</span>
+                    <span>Untung {fmtIDR(cartProfit)}</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <button onClick={bayar} className="w-full py-3.5 rounded-xl font-bold text-base transition-transform duration-150 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2" style={{ background: C.jade, color: "#08130F" }}>
+                    <Check size={18} /> Bayar {fmtIDR(cartTotal)}
+                  </button>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
