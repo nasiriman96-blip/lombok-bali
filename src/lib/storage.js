@@ -40,19 +40,48 @@ export function subscribeAppData(onChange) {
   return () => supabase.removeChannel(channel);
 }
 
-// Sesi login (nama + peran) — cukup disimpan lokal per perangkat, tidak perlu shared.
-const SESSION_KEY = "lombok-bali-session";
-export function getSession() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+/* -----------------------------------------------------------------
+   AUTENTIKASI SUNGGUHAN (Supabase Auth)
+   Username diubah jadi format email internal (username@lombokbali.app)
+   di balik layar, supaya tetap dipakai dengan username biasa. Password
+   diverifikasi & disimpan terenkripsi di server Supabase — bukan lagi
+   tertulis di kode aplikasi.
+------------------------------------------------------------------*/
+const EMAIL_DOMAIN = "lombokbali.app";
+const usernameToEmail = (username) => `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
+
+// Login. Return { user: {name, role} } kalau sukses, atau { error } kalau gagal.
+export async function signIn(username, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: usernameToEmail(username),
+    password,
+  });
+  if (error) return { error: "Username atau password salah." };
+  const meta = data.user?.user_metadata || {};
+  return { user: { name: meta.display_name || username, role: meta.role === "admin" ? "admin" : "staff" } };
 }
-export function setSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+
+export async function signOutUser() {
+  await supabase.auth.signOut();
 }
-export function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+
+// Ambil sesi login yang masih aktif (kalau sebelumnya sudah login & belum expired).
+// Supabase otomatis menyimpan & me-refresh token sesi ini sendiri, kita tinggal baca.
+export async function getActiveUser() {
+  const { data } = await supabase.auth.getSession();
+  const session = data?.session;
+  if (!session) return null;
+  const meta = session.user?.user_metadata || {};
+  return { name: meta.display_name || session.user.email.split("@")[0], role: meta.role === "admin" ? "admin" : "staff" };
 }
+
+// Dengarkan perubahan status login (misal token expired / logout dari tab lain).
+export function subscribeAuth(onChange) {
+  const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session) { onChange(null); return; }
+    const meta = session.user?.user_metadata || {};
+    onChange({ name: meta.display_name || session.user.email.split("@")[0], role: meta.role === "admin" ? "admin" : "staff" });
+  });
+  return () => listener.subscription.unsubscribe();
+}
+
