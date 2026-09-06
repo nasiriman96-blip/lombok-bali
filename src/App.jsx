@@ -499,7 +499,10 @@ export default function App() {
     (async () => {
       const existing = await loadDB();
       skipNextSave.current = true;
-      setDb(existing || genDemoData());
+      // Kalau data yang tersimpan masih dari skema aplikasi lama (tidak punya "stores"),
+      // anggap kosong dan mulai dari data baru — supaya tidak crash membaca struktur yang salah.
+      const isValidSchema = existing && Array.isArray(existing.stores);
+      setDb(isValidSchema ? existing : genDemoData());
       setLoading(false);
     })();
   }, [user]);
@@ -508,7 +511,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const unsub = subscribeAppData((data) => {
-      if (!data) return;
+      if (!data || !Array.isArray(data.stores)) return;
       skipNextSave.current = true;
       setDb(data);
     });
